@@ -1,0 +1,64 @@
+contract_version: "1.0"
+
+# === IDENTITAET ===
+repo:
+  name: "client--francesco-ping-app"
+  description: "Fremd-Repo von Kollege Francesco — wir liefern Code zu, kein Deploy bei uns."
+  suite: "client"
+  status: "wip"
+
+# === CLIENT-BLOCK (Sub-Konvention client--*) ===
+client:
+  customer_name: "Francesco"
+  contract_status: "discovery"
+  data_sensitivity: "low"
+  # contact_email + custom_domain bewusst leer — Owner ist Kollege, kein Kundenvertrag, kein Deploy auf unserer Seite.
+
+# === REPO-TYP ===
+type:
+  primary: "webapp"   # TODO bestaetigen sobald Code da ist (ping-app legt nahe: kleine Web/Backend-App)
+  tags: [client, external-ssot]
+
+# === TECH-STACK ===
+# TODO: ausfuellen sobald Francesco den Initial-Commit pusht
+stack:
+  languages: []
+  runtime: ""
+  framework: ""
+  package_manager: ""
+  database: ""
+  test_framework: ""
+
+# === VERZEICHNIS-LAYOUT ===
+paths:
+  source: "."        # TODO: anpassen wenn Code-Root klar ist (src/, 85_code/, ...)
+  tests: null
+  docs: "00_infos/"
+  context: "00_infos/llm-context.md"
+  holds: "00_infos/meta/open-questions.md"
+  archive: "99_archiv/"
+
+# === COMMANDS ===
+commands:
+  dev: ""
+  build: ""
+  test: null
+  smoke: ""
+
+# === DEPLOYMENT ===
+deployment:
+  deployed: false
+  mode: "not-deployed"
+  ci:
+    platform: "none"
+    auto_deploy: false
+
+# === ENV ===
+env:
+  required: []
+  optional: []
+
+# === ABHAENGIGKEITEN ===
+depends_on:
+  services: []
+  repos: []
