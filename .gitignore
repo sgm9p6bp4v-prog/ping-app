@@ -1,0 +1,34 @@
+# Auto-generated Hook-Artefakte
+.llm-context.md.lock
+.changes.md.lock
+**/.*.lock
+
+# Auto-Reports vom Session-Hook (lokal, nicht ins Repo)
+/90_reports/
+00_infos/90_reports/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.idea/
+.vscode/
+
+# Local data (wenn spaeter SQLite-DB)
+/data/
+*.db
+*.db-wal
+*.db-shm
+
+# Output / Test-Artefakte
+89_output/
