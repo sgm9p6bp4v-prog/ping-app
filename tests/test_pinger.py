@@ -76,3 +76,47 @@ async def test_scheduler_reconcile_spawns_and_cancels(store: Store) -> None:
 
         await sched.stop()
         assert sched._tasks == {}
+
+
+async def test_scheduler_reconcile_restarts_task_on_address_change(store: Store) -> None:
+    """Grumpy audit Sprint 2 HIGH: reconcile must restart loops if
+    address/interval changed."""
+    h = await store.create_host(name="a", address="1.1.1.1", interval_s=1.0)
+
+    fake = AsyncMock(
+        return_value={
+            "rtt_ms": 1.0,
+            "success": True,
+            "error": None,
+            "ts": "1970-01-01T00:00:00.000Z",
+            "host": "x",
+        }
+    )
+
+    with patch("netping.pinger.do_ping", fake):
+        sched = PingScheduler(store, max_concurrent=4, timeout_s=0.5)
+        await sched.start()
+        task_before = sched._tasks[h.id]
+
+        # change address — reconcile should cancel + respawn
+        await store.update_host(h.id, address="2.2.2.2")
+        sched.reconcile(await store.list_hosts())
+        await asyncio.sleep(0.05)
+        assert sched._tasks[h.id] is not task_before
+        assert sched._signatures[h.id] == ("2.2.2.2", 1.0)
+
+        # change interval — reconcile should cancel + respawn
+        task_mid = sched._tasks[h.id]
+        await store.update_host(h.id, interval_s=2.0)
+        sched.reconcile(await store.list_hosts())
+        await asyncio.sleep(0.05)
+        assert sched._tasks[h.id] is not task_mid
+        assert sched._signatures[h.id] == ("2.2.2.2", 2.0)
+
+        # no change — reconcile should NOT respawn
+        task_after = sched._tasks[h.id]
+        sched.reconcile(await store.list_hosts())
+        await asyncio.sleep(0.05)
+        assert sched._tasks[h.id] is task_after
+
+        await sched.stop()

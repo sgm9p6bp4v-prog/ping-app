@@ -18,6 +18,7 @@ taken.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import platform
 import random
 from collections.abc import Awaitable, Callable
@@ -49,6 +50,7 @@ async def do_ping(address: str, *, timeout_s: float = 2.0) -> dict:
     """Run one ping and return ``{rtt_ms, success, error, ts, host}``."""
     cmd = build_ping_command(address, count=1, timeout_s=timeout_s)
     ts = utcnow_iso()
+    proc = None
     try:
         proc = await asyncio.create_subprocess_exec(
             *cmd,
@@ -60,6 +62,11 @@ async def do_ping(address: str, *, timeout_s: float = 2.0) -> dict:
         output = stdout.decode(errors="replace") + stderr.decode(errors="replace")
         parsed = parse_ping_output(output, platform.system())
     except TimeoutError:
+        if proc is not None and proc.returncode is None:
+            with contextlib.suppress(ProcessLookupError):
+                proc.kill()
+            with contextlib.suppress(Exception):
+                await proc.wait()
         parsed = {"success": False, "rtt_ms": None, "error": "Process timeout"}
     except FileNotFoundError:
         parsed = {"success": False, "rtt_ms": None, "error": "ping command not found"}
@@ -84,6 +91,9 @@ class PingScheduler:
         self.semaphore = asyncio.Semaphore(max_concurrent)
         self.broadcaster = broadcaster
         self._tasks: dict[int, asyncio.Task[None]] = {}
+        # Cached (address, interval_s) per running host_id so reconcile can
+        # detect changes that require a task restart (Grumpy audit Sprint 2).
+        self._signatures: dict[int, tuple[str, float]] = {}
         self._stop = asyncio.Event()
 
     # ---- public lifecycle ----------------------------------------------------
@@ -102,27 +112,36 @@ class PingScheduler:
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
         self._tasks.clear()
+        self._signatures.clear()
         self._stop.clear()
 
     def reconcile(self, hosts: list[Host]) -> None:
         """Sync the running host_loops with the given desired set.
 
-        Hosts present + enabled: ensure a task runs.
-        Hosts present + disabled or absent: cancel any running task.
+        - Hosts present + enabled with **changed** address/interval: restart task.
+        - Hosts present + enabled without changes: leave task running.
+        - Hosts disabled or absent: cancel any running task.
         """
-        desired_ids = {h.id for h in hosts if h.enabled}
-        # cancel removed/disabled
+        desired = {h.id: h for h in hosts if h.enabled}
+
+        # cancel removed/disabled OR changed
         for hid in list(self._tasks):
-            if hid not in desired_ids:
-                self._tasks.pop(hid).cancel()
-        # spawn new
-        for h in hosts:
-            if h.enabled and h.id not in self._tasks:
+            current = desired.get(hid)
+            signature = self._signatures.get(hid)
+            if current is None or (current.address, current.interval_s) != signature:
+                task = self._tasks.pop(hid)
+                self._signatures.pop(hid, None)
+                task.cancel()
+
+        # spawn new (or replacements for cancelled)
+        for h in desired.values():
+            if h.id not in self._tasks:
                 self._spawn(h)
 
     # ---- internals -----------------------------------------------------------
 
     def _spawn(self, host: Host) -> None:
+        self._signatures[host.id] = (host.address, host.interval_s)
         self._tasks[host.id] = asyncio.create_task(
             self._host_loop(host), name=f"ping-host-{host.id}"
         )
@@ -143,16 +162,21 @@ class PingScheduler:
                 )
                 await self.store.enqueue_sample(sample)
                 if self.broadcaster is not None:
-                    await self.broadcaster(
-                        {
-                            "type": "sample",
-                            "host_id": host.id,
-                            "ts": result["ts"],
-                            "rtt_ms": result["rtt_ms"],
-                            "success": result["success"],
-                            "error": result["error"],
-                        }
-                    )
+                    # Don't let a stuck broadcaster pace the ping loop.
+                    with contextlib.suppress(TimeoutError, Exception):
+                        await asyncio.wait_for(
+                            self.broadcaster(
+                                {
+                                    "type": "sample",
+                                    "host_id": host.id,
+                                    "ts": result["ts"],
+                                    "rtt_ms": result["rtt_ms"],
+                                    "success": result["success"],
+                                    "error": result["error"],
+                                }
+                            ),
+                            timeout=0.5,
+                        )
             except asyncio.CancelledError:
                 raise
             except Exception:

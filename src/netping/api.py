@@ -8,25 +8,28 @@ from __future__ import annotations
 
 import asyncio
 import ipaddress
+import platform
 import re
+import socket
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field, field_validator
 
 from . import __version__
 from .store import Host, Store
 from .ws import WebSocketHub
 
-# Tasks spawned by _reconcile() must be kept alive (asyncio holds only a weakref).
-_BG_TASKS: set[asyncio.Task[None]] = set()
-
 # RFC 1123 hostname (lenient) — labels of 1..63 chars, dots between.
 _HOSTNAME_RE = re.compile(
     r"^(?=.{1,253}$)([a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)"
     r"(\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$"
 )
+
+# Hard caps to prevent DoS via unbounded queries.
+HISTORY_MAX_LIMIT = 100_000
+EVENTS_MAX_LIMIT = 5_000
 
 
 def _validate_address(value: str) -> str:
@@ -77,16 +80,37 @@ def _hub(request: Request) -> WebSocketHub:
     return request.app.state.hub
 
 
+def _detect_lan_ip() -> str:
+    """UDP-probe trick to find the routable LAN IP without sending traffic."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("10.255.255.255", 1))
+        return s.getsockname()[0]
+    except OSError:
+        return "unavailable"
+    finally:
+        s.close()
+
+
 router = APIRouter()
 
 
-@router.get("/info")
+@router.get("/api/info")
 async def info(request: Request) -> dict[str, Any]:
     return {
         "version": __version__,
         "ts": datetime.now(UTC).isoformat(timespec="seconds"),
+        "hostname": socket.gethostname(),
+        "lan_ip": _detect_lan_ip(),
+        "os": platform.system(),
         "ws_clients": len(_hub(request)),
     }
+
+
+# Backward-compat: keep /info for now, alias to /api/info.
+@router.get("/info", include_in_schema=False)
+async def info_alias(request: Request) -> dict[str, Any]:
+    return await info(request)
 
 
 @router.get("/api/hosts")
@@ -99,7 +123,7 @@ async def list_hosts(request: Request) -> list[dict[str, Any]]:
 async def create_host(payload: HostIn, request: Request) -> dict[str, Any]:
     h = await _store(request).create_host(**payload.model_dump())
     await _broadcast_host_event(request, "host_created", h)
-    _reconcile(request)
+    await _reconcile(request)
     return h.to_dict()
 
 
@@ -118,7 +142,7 @@ async def patch_host(host_id: int, payload: HostPatch, request: Request) -> dict
     if h is None:
         raise HTTPException(status_code=404, detail="host not found")
     await _broadcast_host_event(request, "host_updated", h)
-    _reconcile(request)
+    await _reconcile(request)
     return h.to_dict()
 
 
@@ -128,7 +152,7 @@ async def delete_host(host_id: int, request: Request) -> None:
     if not ok:
         raise HTTPException(status_code=404, detail="host not found")
     await _hub(request).broadcast({"type": "host_deleted", "host_id": host_id})
-    _reconcile(request)
+    await _reconcile(request)
 
 
 @router.get("/api/hosts/{host_id}/history")
@@ -137,7 +161,7 @@ async def history(
     request: Request,
     since: datetime | None = None,
     until: datetime | None = None,
-    limit: int = 10_000,
+    limit: int = Query(default=10_000, ge=1, le=HISTORY_MAX_LIMIT),
 ) -> dict[str, Any]:
     if await _store(request).get_host(host_id) is None:
         raise HTTPException(status_code=404, detail="host not found")
@@ -149,7 +173,7 @@ async def history(
 async def events(
     request: Request,
     host_id: int | None = None,
-    limit: int = 200,
+    limit: int = Query(default=200, ge=1, le=EVENTS_MAX_LIMIT),
 ) -> list[dict[str, Any]]:
     return await _store(request).events(host_id, limit=limit)
 
@@ -161,15 +185,19 @@ async def _broadcast_host_event(request: Request, evt_type: str, host: Host) -> 
     await _hub(request).broadcast({"type": evt_type, "host": host.to_dict()})
 
 
-def _reconcile(request: Request) -> None:
+async def _reconcile(request: Request) -> None:
+    """Synchronous in-handler reconcile.
+
+    Synchronous because parallel reconciles caused state races (Grumpy audit
+    Sprint 2). The scheduler itself is held under the app's request-handling
+    event loop; a global lock keeps repeated rapid CRUD operations from
+    interleaving snapshots.
+    """
     scheduler = getattr(request.app.state, "scheduler", None)
     if scheduler is None:
         return
-
-    async def _do() -> None:
+    lock: asyncio.Lock = getattr(request.app.state, "reconcile_lock", None) or asyncio.Lock()
+    request.app.state.reconcile_lock = lock
+    async with lock:
         hosts = await _store(request).list_hosts()
         scheduler.reconcile(hosts)
-
-    task = asyncio.create_task(_do(), name="api-reconcile")
-    _BG_TASKS.add(task)
-    task.add_done_callback(_BG_TASKS.discard)

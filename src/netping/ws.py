@@ -40,18 +40,25 @@ class WebSocketHub:
 
     async def broadcast(self, message: dict[str, Any]) -> None:
         payload = json.dumps(message, default=str)
-        dead: list[WebSocket] = []
         async with self._lock:
             clients = list(self._clients)
-        for ws in clients:
-            try:
-                await ws.send_text(payload)
-            except Exception:
-                dead.append(ws)
+        # Send to all clients concurrently with a per-client timeout so a single
+        # slow socket cannot stall the fan-out (Grumpy audit Sprint 2).
+        results = await asyncio.gather(
+            *(self._send_one(ws, payload) for ws in clients), return_exceptions=True
+        )
+        dead = [ws for ws, ok in zip(clients, results, strict=True) if ok is not True]
         if dead:
             async with self._lock:
                 for ws in dead:
                     self._clients.discard(ws)
+
+    async def _send_one(self, ws: WebSocket, payload: str) -> bool:
+        try:
+            await asyncio.wait_for(ws.send_text(payload), timeout=0.5)
+        except Exception:
+            return False
+        return True
 
     def __len__(self) -> int:
         return len(self._clients)

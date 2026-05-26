@@ -113,3 +113,31 @@ async def test_history_endpoint(client: AsyncClient) -> None:
 async def test_history_404_for_unknown_host(client: AsyncClient) -> None:
     r = await client.get("/api/hosts/9999/history")
     assert r.status_code == 404
+
+
+# --- Regression tests for Grumpy audit fixes ---------------------------------
+
+
+async def test_history_limit_capped(client: AsyncClient) -> None:
+    h = (await client.post("/api/hosts", json={"name": "a", "address": "1.1.1.1"})).json()
+    r = await client.get(f"/api/hosts/{h['id']}/history?limit=1000000")
+    assert r.status_code == 422  # exceeds HISTORY_MAX_LIMIT
+
+
+async def test_history_limit_negative_rejected(client: AsyncClient) -> None:
+    h = (await client.post("/api/hosts", json={"name": "a", "address": "1.1.1.1"})).json()
+    r = await client.get(f"/api/hosts/{h['id']}/history?limit=-1")
+    assert r.status_code == 422
+
+
+async def test_events_limit_capped(client: AsyncClient) -> None:
+    r = await client.get("/api/events?limit=999999")
+    assert r.status_code == 422
+
+
+async def test_api_info_returns_hostname_and_lan_ip(client: AsyncClient) -> None:
+    r = await client.get("/api/info")
+    assert r.status_code == 200
+    body = r.json()
+    for field in ("version", "ts", "hostname", "lan_ip", "os", "ws_clients"):
+        assert field in body

@@ -19,7 +19,9 @@ class Settings(BaseSettings):
     # Network
     bind_host: str = "0.0.0.0"
     port: int = 8000
-    cors_origins: list[str] = Field(default_factory=lambda: ["*"])
+    # Default = no cross-origin requests (LAN-trust UI lives on the same origin).
+    # Operator sets PING_CORS_ORIGINS='["http://other-lan-host"]' to allow more.
+    cors_origins: list[str] = Field(default_factory=list)
 
     # Storage
     db_path: Path = Path("data/ping.db")

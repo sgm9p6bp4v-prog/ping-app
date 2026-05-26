@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 import sqlite3
 from collections.abc import AsyncIterator, Iterable
 from contextlib import asynccontextmanager
@@ -54,6 +55,7 @@ CREATE TABLE IF NOT EXISTS samples (
 );
 
 CREATE INDEX IF NOT EXISTS idx_samples_host_ts ON samples(host_id, ts);
+CREATE INDEX IF NOT EXISTS idx_samples_ts ON samples(ts);
 
 CREATE TABLE IF NOT EXISTS events (
   id       INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -65,6 +67,7 @@ CREATE TABLE IF NOT EXISTS events (
 );
 
 CREATE INDEX IF NOT EXISTS idx_events_host_ts ON events(host_id, ts);
+CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts);
 """
 
 
@@ -328,12 +331,22 @@ class Store:
             events, self._event_buf = self._event_buf, []
         if not samples and not events:
             return
-        async with self._conn() as db:
-            if samples:
-                await self._insert_samples(db, samples)
-            if events:
-                await self._insert_events(db, events)
-            await db.commit()
+        try:
+            async with self._conn() as db:
+                if samples:
+                    await self._insert_samples(db, samples)
+                if events:
+                    await self._insert_events(db, events)
+                await db.commit()
+        except Exception:
+            # Don't drop unflushed rows on transient errors (e.g. FK violation
+            # if a host was deleted mid-flush). Re-queue and let the next tick
+            # try again. Persistent failures will be visible in the log.
+            logging.getLogger(__name__).exception("flush failed; re-queueing buffer")
+            async with self._buf_lock:
+                # Prepend so order is roughly preserved.
+                self._sample_buf = samples + self._sample_buf
+                self._event_buf = events + self._event_buf
 
     @staticmethod
     async def _insert_samples(db: aiosqlite.Connection, samples: Iterable[Sample]) -> None:
