@@ -24,7 +24,10 @@ import random
 from collections.abc import Awaitable, Callable
 
 from .parser import parse_ping_output
-from .store import Host, Sample, Store, utcnow_iso
+from .store import Event, Host, Sample, Store, utcnow_iso
+
+# Three consecutive failures = outage_start; one success after that = outage_end.
+OUTAGE_THRESHOLD_FAILS = 3
 
 Broadcaster = Callable[[dict], Awaitable[None]]
 
@@ -149,6 +152,8 @@ class PingScheduler:
     async def _host_loop(self, host: Host) -> None:
         # jitter so 254 hosts do not bunch on the same wallclock millisecond
         await asyncio.sleep(random.uniform(0, host.interval_s))
+        fail_streak = 0
+        in_outage = False
         while not self._stop.is_set():
             try:
                 async with self.semaphore:
@@ -161,6 +166,26 @@ class PingScheduler:
                     error=result["error"],
                 )
                 await self.store.enqueue_sample(sample)
+
+                # Outage detection: emit events on state transitions.
+                if result["success"]:
+                    if in_outage:
+                        await self._emit_event(
+                            host.id, result["ts"], "outage_end", "host recovered"
+                        )
+                        in_outage = False
+                    fail_streak = 0
+                else:
+                    fail_streak += 1
+                    if fail_streak == OUTAGE_THRESHOLD_FAILS and not in_outage:
+                        why = result.get("error") or "no response"
+                        await self._emit_event(
+                            host.id,
+                            result["ts"],
+                            "outage_start",
+                            f"failed {OUTAGE_THRESHOLD_FAILS}x: {why}",
+                        )
+                        in_outage = True
                 if self.broadcaster is not None:
                     # Don't let a stuck broadcaster pace the ping loop.
                     with contextlib.suppress(TimeoutError, Exception):
@@ -182,3 +207,15 @@ class PingScheduler:
             except Exception:
                 pass
             await asyncio.sleep(host.interval_s)
+
+    async def _emit_event(self, host_id: int, ts: str, evt_type: str, msg: str) -> None:
+        await self.store.enqueue_event(Event(host_id=host_id, ts=ts, type=evt_type, message=msg))
+        if self.broadcaster is not None:
+            with contextlib.suppress(Exception):
+                await asyncio.wait_for(
+                    self.broadcaster(
+                        {"type": "event", "host_id": host_id, "ts": ts,
+                         "evt_type": evt_type, "message": msg}
+                    ),
+                    timeout=0.5,
+                )

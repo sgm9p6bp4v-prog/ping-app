@@ -93,6 +93,37 @@ systemctl restart ping-app    # after editing /etc/ping-app/env
 
 Open in browser: `http://<server-ip>:8000/`.
 
+## Backup & Restore
+
+All state lives in `/var/lib/ping-app/ping.db` (SQLite). Configuration is in
+`/etc/ping-app/env`. There is no separate cache.
+
+**Backup** (online — WAL mode safe):
+
+```bash
+sudo sqlite3 /var/lib/ping-app/ping.db ".backup '/srv/backup/ping-$(date +%F).db'"
+sudo cp /etc/ping-app/env /srv/backup/env-$(date +%F)
+```
+
+A simple cron line:
+
+```cron
+0 3 * * * sqlite3 /var/lib/ping-app/ping.db ".backup '/srv/backup/ping-$(date +\%F).db'" && find /srv/backup -name 'ping-*.db' -mtime +14 -delete
+```
+
+**Restore** to a fresh server:
+
+```bash
+sudo systemctl stop ping-app
+sudo install -o ping-app -g ping-app -m 0640 backup.db /var/lib/ping-app/ping.db
+sudo install -o root     -g ping-app -m 0640 env      /etc/ping-app/env
+sudo systemctl start ping-app
+```
+
+`install.sh` is idempotent — re-running it never touches `/var/lib/ping-app/`,
+so deploying a new bundle never destroys history. The schema uses
+`CREATE … IF NOT EXISTS`, so older DBs from previous versions are compatible.
+
 ## License
 
 [MIT](LICENSE). Vendored libraries (Chart.js, Inter) keep their original
