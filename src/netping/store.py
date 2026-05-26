@@ -153,6 +153,7 @@ class Store:
         self._buf_lock = asyncio.Lock()
         self._writer_task: asyncio.Task[None] | None = None
         self._stop = asyncio.Event()
+        self._flush_failures = 0
 
     # ---- lifecycle -----------------------------------------------------------
 
@@ -339,14 +340,27 @@ class Store:
                     await self._insert_events(db, events)
                 await db.commit()
         except Exception:
-            # Don't drop unflushed rows on transient errors (e.g. FK violation
-            # if a host was deleted mid-flush). Re-queue and let the next tick
-            # try again. Persistent failures will be visible in the log.
-            logging.getLogger(__name__).exception("flush failed; re-queueing buffer")
-            async with self._buf_lock:
-                # Prepend so order is roughly preserved.
-                self._sample_buf = samples + self._sample_buf
-                self._event_buf = events + self._event_buf
+            # Transient errors (e.g. host deleted mid-flush → FK violation)
+            # → re-queue once. Persistent errors → drop the bad batch with a
+            # loud log so the writer cannot be poisoned (Final audit GPT).
+            self._flush_failures += 1
+            log = logging.getLogger(__name__)
+            if self._flush_failures <= 2:
+                log.exception("flush failed (attempt %d); re-queueing buffer",
+                              self._flush_failures)
+                async with self._buf_lock:
+                    self._sample_buf = samples + self._sample_buf
+                    self._event_buf = events + self._event_buf
+            else:
+                log.exception(
+                    "flush failed %dx in a row; DROPPING %d samples + %d events to "
+                    "unblock the writer. Investigate immediately.",
+                    self._flush_failures, len(samples), len(events),
+                )
+                self._flush_failures = 0
+            return
+        # success
+        self._flush_failures = 0
 
     @staticmethod
     async def _insert_samples(db: aiosqlite.Connection, samples: Iterable[Sample]) -> None:

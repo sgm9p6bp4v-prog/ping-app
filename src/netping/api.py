@@ -30,6 +30,9 @@ _HOSTNAME_RE = re.compile(
 # Hard caps to prevent DoS via unbounded queries.
 HISTORY_MAX_LIMIT = 100_000
 EVENTS_MAX_LIMIT = 5_000
+# Hard cap on total hosts. PRD §1 sizes for one /24 (254 hosts). Anything more
+# would push past designed scheduler/SQLite/WS budgets. Final audit GPT.
+HOST_CAP = 254
 
 
 def _validate_address(value: str) -> str:
@@ -121,6 +124,12 @@ async def list_hosts(request: Request) -> list[dict[str, Any]]:
 
 @router.post("/api/hosts", status_code=status.HTTP_201_CREATED)
 async def create_host(payload: HostIn, request: Request) -> dict[str, Any]:
+    existing = await _store(request).list_hosts()
+    if len(existing) >= HOST_CAP:
+        raise HTTPException(
+            status_code=409,
+            detail=f"host cap reached ({HOST_CAP}); delete an existing host or raise the cap",
+        )
     h = await _store(request).create_host(**payload.model_dump())
     await _broadcast_host_event(request, "host_created", h)
     await _reconcile(request)

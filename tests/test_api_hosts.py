@@ -9,6 +9,7 @@ import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
+from netping import api as api_mod
 from netping.api import router
 from netping.app import CSRFGuardMiddleware
 from netping.store import Store
@@ -167,3 +168,14 @@ async def test_csrf_guard_allows_read_without_header(app: FastAPI) -> None:
     async with AsyncClient(transport=transport, base_url="http://test") as bare:
         r = await bare.get("/api/hosts")
     assert r.status_code == 200
+
+
+async def test_host_cap_enforced(client: AsyncClient, monkeypatch) -> None:
+    """Final audit GPT MED: LAN client must not be able to spam unlimited hosts."""
+    monkeypatch.setattr(api_mod, "HOST_CAP", 3)
+    for i in range(3):
+        r = await client.post("/api/hosts", json={"name": f"h{i}", "address": f"1.1.1.{i + 1}"})
+        assert r.status_code == 201
+    r = await client.post("/api/hosts", json={"name": "h4", "address": "1.1.1.99"})
+    assert r.status_code == 409
+    assert "cap" in r.json()["detail"].lower()

@@ -32,10 +32,25 @@ echo
 
 command -v "$PY" >/dev/null || { echo "python3 not found"; exit 1; }
 PY_VER=$($PY -c 'import sys; print(f"{sys.version_info[0]}.{sys.version_info[1]}")')
-case "$PY_VER" in
-  3.11|3.12|3.13) : ;;
-  *) echo "Python 3.11+ required (found $PY_VER)"; exit 1 ;;
-esac
+
+# Bundle ships CPython wheels for one Python version (see tools/build_bundle.sh
+# --python-version, default 3.11). Mismatch = pip will refuse to install the
+# wheels with --no-index → silent install failure. We pick the wheel-tagged
+# version from a sentinel wheel filename and compare exactly.
+EXPECTED_PY=$(ls "$BUNDLE_DIR/wheels"/*.whl 2>/dev/null \
+  | grep -oE 'cp[0-9]+' | sort -u | head -1 \
+  | sed 's/cp/3./;s/3\.3/3.1/' || true)
+if [[ -z "$EXPECTED_PY" ]]; then
+  # All-pure bundle — any modern Python works.
+  case "$PY_VER" in
+    3.11|3.12|3.13) : ;;
+    *) echo "Python 3.11+ required (found $PY_VER)"; exit 1 ;;
+  esac
+elif [[ "$PY_VER" != "$EXPECTED_PY" ]]; then
+  echo "Bundle was built for Python $EXPECTED_PY, target has $PY_VER." >&2
+  echo "Rebuild bundle on builder: tools/build_bundle.sh --python-version $PY_VER" >&2
+  exit 1
+fi
 
 [[ -d $BUNDLE_DIR/wheels ]] || { echo "wheels/ missing in bundle — broken archive?"; exit 1; }
 [[ -d $BUNDLE_DIR/src ]] || { echo "src/ missing in bundle"; exit 1; }
