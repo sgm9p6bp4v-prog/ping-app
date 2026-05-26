@@ -1,51 +1,103 @@
 # NetPing Dashboard
 
-Server-resident LAN ping dashboard. Monitors up to ~254 hosts (one /24 subnet)
-in real time, runs **air-gapped** on a Linux server, accessed via HTTP from
-anywhere in the LAN.
+Server-resident LAN ping dashboard. Monitors up to ~254 hosts (a /24 subnet)
+in real time. Runs **air-gapped** on a Linux server, accessed via HTTP from
+anywhere in the LAN. Editorial-brutalist UI (Inter, monochrome, hairline
+trennlinien — see `00_infos/untitled.pen`).
 
-> **Status:** Sprint 1 (Baseline + Tests). Not yet runnable as a server.
-> See `00_infos/prd-plan.md` for the full roadmap.
+## Try it in 30 seconds (any Linux/macOS dev box)
+
+```bash
+git clone git@github.com:sgm9p6bp4v-prog/ping-app.git
+cd ping-app
+make install-dev
+make run
+# → open http://127.0.0.1:8000
+```
+
+The server boots **PAUSED**. Click **START** in the header to begin pinging
+(it auto-stops after 30 min, countdown is visible). Click **+** bottom-right
+to add hosts.
+
+## Features
+
+- **254-host scale**, real workload ~50. asyncio.Semaphore caps concurrent
+  pings; jittered scheduler avoids subprocess storms.
+- **Start/Stop server lifecycle** with 30-min auto-stop timer (`PING_MONITORING_DURATION_S`)
+  — perfect for ephemeral diagnostic runs.
+- **Groups** as first-class entities: each has a settings page (gear icon ⚙)
+  with editable CIDR rules.
+- **Suggestions inbox** — when a host's IP matches another group's CIDR,
+  the move is *suggested*. Operator accepts/dismisses individually. Never
+  auto-moves. Dismissals persist.
+- **Per-group toggle**: PAUSE/RESUME a whole section (e.g. disable
+  "external" for air-gapped deploy, keep it listed but collapsed).
+- **IP-sorted alternative view** — toggle GROUPS / IP in header.
+- **Live sync** — multiple browser tabs stay in sync via WebSocket.
+- **EN + IT** UI, theme light/dark, persisted in localStorage.
+- **SQLite history** with retention (7 d samples, 30 d events).
+- **Outage events** auto-emitted (3 consecutive failures → outage_start,
+  recovery → outage_end).
+- **Air-gapped install**: offline tar.gz bundle (`tools/build_bundle.sh`)
+  with vendored wheels + Chart.js + Inter fonts. No CDN at runtime.
 
 ## Documentation
 
 - [`00_infos/prd.md`](00_infos/prd.md) — Product Requirements (v0.3)
-- [`00_infos/prd-questions.md`](00_infos/prd-questions.md) — Clarifying Qs
-  (all blockers answered)
 - [`00_infos/prd-plan.md`](00_infos/prd-plan.md) — Implementation plan
-  (5 sprints, 22-30 PT)
-- [`00_infos/prd-plan-audit.md`](00_infos/prd-plan-audit.md) — Plan audit
-  (Opus max)
-- [`00_infos/untitled.pen`](00_infos/untitled.pen) — Design system
-  (Pencil file, Editorial Brutalist)
-- [`00_infos/repo-contract.yaml`](00_infos/repo-contract.yaml) — Machine-
-  readable repo metadata
+- [`00_infos/acceptance.md`](00_infos/acceptance.md) — v1 acceptance checklist
+- [`00_infos/audits/final-mega-loop.md`](00_infos/audits/final-mega-loop.md) — GPT+Opus audit
+- [`00_infos/untitled.pen`](00_infos/untitled.pen) — Design system (Pencil)
+- [`00_infos/repo-contract.yaml`](00_infos/repo-contract.yaml) — Machine-readable metadata
 
 ## Development
 
 ```bash
 make venv          # create .venv
-make install-dev   # install dev deps from requirements-dev.txt
-make test          # run pytest
-make lint          # run ruff lint
-make format        # auto-format
+make install-dev   # install dev + runtime deps
+make run           # start dev server on http://127.0.0.1:8000
+make test          # 60+ pytest in ~10 s
+make lint          # ruff
+make format        # ruff format + black
 make check         # lint + test
+make lock          # recompile requirements*.txt via pip-tools
 ```
 
 ### Layout
 
 ```
 src/netping/          # Python package
-  parser.py           # ping output parser (Sprint 1: golden-tested baseline)
-  …                   # app.py, pinger.py, store.py, ws.py — Sprint 2+
-tests/                # pytest
-  fixtures/           # captured ping outputs (real + hand-crafted)
-deploy/               # systemd unit, env.example — Sprint 4
-tools/                # build_bundle.sh — Sprint 4
-static/               # SPA (HTML/CSS/JS) — Sprint 3
-  vendor/             # vendored Chart.js + Inter font (air-gap requirement)
-00_infos/             # documentation
+  app.py              # FastAPI lifespan + factory + WS endpoint
+  api.py              # REST CRUD: hosts, groups, group CIDRs, suggestions, monitoring
+  config.py           # pydantic Settings (env prefix PING_)
+  monitoring.py       # start/stop lifecycle + auto-stop timer
+  pinger.py           # asyncio ping engine + scheduler (Semaphore, jitter)
+  store.py            # SQLite WAL + batched async writer + retention
+  parser.py           # ICMP ping output parser
+  ws.py               # WebSocket hub with per-client timeout fan-out
+tests/                # 60+ pytest; characterisation fixtures under fixtures/
+static/               # Single-page UI (Vanilla JS modules, no build step)
+  vendor/             # Vendored Chart.js + Inter font (air-gap requirement)
+  i18n/               # en.json + it.json
+deploy/               # systemd unit + env template
+tools/                # build_bundle.sh + verify_bundle_offline.sh
+00_infos/             # PRD, plan, audits, acceptance checklist
 ```
+
+### UI key actions
+
+| Action                          | How |
+|---------------------------------|-----|
+| Open host detail (chart, log)   | Click a host card |
+| Edit a host                     | Shift+Click a host card |
+| Add a host                      | **+** floating button bottom-right |
+| Open group settings (CIDR list) | ⚙ gear icon in group header |
+| Pause / resume a group          | PAUSE / RESUME button in group header |
+| Collapse / expand a group       | ▼ / ▶ caret in group header |
+| Accept move suggestion          | ACCEPT in suggestions inbox |
+| Dismiss suggestion (persistent) | DISMISS in suggestions inbox |
+| Switch group / IP view          | GROUPS / IP toggle (above the host list) |
+| Start / stop monitoring         | START / STOP button in header (countdown) |
 
 ### Lockfiles
 

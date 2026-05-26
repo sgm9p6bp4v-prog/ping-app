@@ -1,4 +1,4 @@
-.PHONY: help venv install install-dev lock test lint format check clean
+.PHONY: help venv install install-dev run lock test lint format check clean
 
 PY := python3
 VENV := .venv
@@ -8,6 +8,7 @@ help:
 	@echo "make venv         create .venv (Python $$($(PY) --version))"
 	@echo "make install      install runtime deps (requirements.txt)"
 	@echo "make install-dev  install dev deps (requirements-dev.txt)"
+	@echo "make run          start dev server on http://127.0.0.1:8000"
 	@echo "make lock         recompile lockfiles via pip-tools"
 	@echo "make test         run pytest"
 	@echo "make lint         run ruff lint"
@@ -32,6 +33,10 @@ lock: venv
 
 test:
 	$(BIN)/pytest
+
+run:
+	PYTHONPATH=src PING_BIND_HOST=127.0.0.1 PING_PORT=8000 \
+	  $(BIN)/uvicorn netping.app:app --reload --app-dir src --host 127.0.0.1 --port 8000
 
 lint:
 	$(BIN)/ruff check .
