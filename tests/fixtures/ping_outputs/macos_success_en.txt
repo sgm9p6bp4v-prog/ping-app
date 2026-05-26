@@ -1,0 +1,5 @@
+PING 8.8.8.8 (8.8.8.8): 56 data bytes
+
+--- 8.8.8.8 ping statistics ---
+1 packets transmitted, 1 packets received, 0.0% packet loss, 1 packets out of wait time
+round-trip min/avg/max/stddev = 14.203/14.203/14.203/nan ms

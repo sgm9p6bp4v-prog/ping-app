@@ -3,7 +3,7 @@ contract_version: "1.0"
 # === IDENTITAET ===
 repo:
   name: "client--francesco-ping-app"
-  description: "Fremd-Repo von Kollege Francesco — wir liefern Code zu, kein Deploy bei uns."
+  description: "Server-resident LAN ping dashboard (up to /24, air-gapped). Fremd-Repo von Kollege Francesco."
   suite: "client"
   status: "wip"
 
@@ -12,42 +12,44 @@ client:
   customer_name: "Francesco"
   contract_status: "discovery"
   data_sensitivity: "low"
-  # contact_email + custom_domain bewusst leer — Owner ist Kollege, kein Kundenvertrag, kein Deploy auf unserer Seite.
 
 # === REPO-TYP ===
 type:
-  primary: "webapp"   # TODO bestaetigen sobald Code da ist (ping-app legt nahe: kleine Web/Backend-App)
-  tags: [client, external-ssot]
+  primary: "webapp"
+  tags: [client, external-ssot, air-gapped, server-app]
 
 # === TECH-STACK ===
-# TODO: ausfuellen sobald Francesco den Initial-Commit pusht
 stack:
-  languages: []
-  runtime: ""
-  framework: ""
-  package_manager: ""
-  database: ""
-  test_framework: ""
+  languages: [python, javascript]
+  runtime: "python"
+  runtime_version: ">=3.11"
+  framework: "fastapi"
+  package_manager: "pip + pip-tools"
+  database: "sqlite"
+  test_framework: "pytest"
 
 # === VERZEICHNIS-LAYOUT ===
 paths:
-  source: "."        # TODO: anpassen wenn Code-Root klar ist (src/, 85_code/, ...)
-  tests: null
+  source: "src/"
+  tests: "tests/"
   docs: "00_infos/"
   context: "00_infos/llm-context.md"
   holds: "00_infos/meta/open-questions.md"
   archive: "99_archiv/"
+  entrypoint: "src/netping/app.py"   # geplant fuer Sprint 2
 
 # === COMMANDS ===
 commands:
-  dev: ""
-  build: ""
-  test: null
-  smoke: ""
+  dev: "make install-dev && .venv/bin/uvicorn netping.app:app --reload --app-dir src"
+  build: "tools/build_bundle.sh"
+  test: "make test"
+  lint: "make lint"
+  format: "make format"
+  smoke: ".venv/bin/pytest tests/test_parser.py"
 
 # === DEPLOYMENT ===
 deployment:
-  deployed: false
+  deployed: false   # Kein Deploy bei uns (Francesco SSOT)
   mode: "not-deployed"
   ci:
     platform: "none"
@@ -56,7 +58,15 @@ deployment:
 # === ENV ===
 env:
   required: []
-  optional: []
+  optional:
+    - PING_PORT
+    - PING_BIND_HOST
+    - PING_DB_PATH
+    - PING_MAX_CONCURRENT_PINGS
+    - PING_SAMPLE_RETENTION_DAYS
+    - PING_EVENT_RETENTION_DAYS
+    - PING_SLOW_THRESHOLD_MS
+    - PING_LANGUAGE_DEFAULT
 
 # === ABHAENGIGKEITEN ===
 depends_on:

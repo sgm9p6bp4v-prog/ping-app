@@ -1,0 +1,1 @@
+ping: cannot resolve host.nonexistent.local: Unknown host

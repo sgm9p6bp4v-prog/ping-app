@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-26",
+  "purpose": "Locked manifest of vendored static assets. Air-gapped deploy: nothing here may be loaded from a CDN at runtime.",
+  "assets": [
+    {
+      "name": "chart.js",
+      "version": "4.4.1",
+      "path": "static/vendor/chart.umd.min.js",
+      "license": "MIT",
+      "license_path": "static/vendor/chartjs.LICENSE.txt",
+      "source": "https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"
+    },
+    {
+      "name": "inter-regular",
+      "version": "4.0",
+      "path": "static/vendor/inter/Inter-Regular.woff2",
+      "license": "SIL OFL 1.1",
+      "license_path": "static/vendor/inter/OFL.txt",
+      "source": "https://github.com/rsms/inter/raw/v4.0/docs/font-files/Inter-Regular.woff2"
+    },
+    {
+      "name": "inter-medium",
+      "version": "4.0",
+      "path": "static/vendor/inter/Inter-Medium.woff2",
+      "license": "SIL OFL 1.1",
+      "license_path": "static/vendor/inter/OFL.txt",
+      "source": "https://github.com/rsms/inter/raw/v4.0/docs/font-files/Inter-Medium.woff2"
+    },
+    {
+      "name": "inter-bold",
+      "version": "4.0",
+      "path": "static/vendor/inter/Inter-Bold.woff2",
+      "license": "SIL OFL 1.1",
+      "license_path": "static/vendor/inter/OFL.txt",
+      "source": "https://github.com/rsms/inter/raw/v4.0/docs/font-files/Inter-Bold.woff2"
+    },
+    {
+      "name": "inter-black",
+      "version": "4.0",
+      "path": "static/vendor/inter/Inter-Black.woff2",
+      "license": "SIL OFL 1.1",
+      "license_path": "static/vendor/inter/OFL.txt",
+      "source": "https://github.com/rsms/inter/raw/v4.0/docs/font-files/Inter-Black.woff2"
+    }
+  ]
+}
