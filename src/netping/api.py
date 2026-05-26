@@ -98,6 +98,25 @@ def _detect_lan_ip() -> str:
 router = APIRouter()
 
 
+def _monitoring(request: Request):
+    return request.app.state.monitoring
+
+
+@router.get("/api/monitoring")
+async def monitoring_status(request: Request) -> dict[str, Any]:
+    return _monitoring(request).status()
+
+
+@router.post("/api/monitoring/start")
+async def monitoring_start(request: Request) -> dict[str, Any]:
+    return await _monitoring(request).start()
+
+
+@router.post("/api/monitoring/stop")
+async def monitoring_stop(request: Request) -> dict[str, Any]:
+    return await _monitoring(request).stop()
+
+
 @router.get("/api/info")
 async def info(request: Request) -> dict[str, Any]:
     return {
@@ -178,6 +197,136 @@ async def history(
     return {"host_id": host_id, "samples": rows, "count": len(rows)}
 
 
+class GroupPatch(BaseModel):
+    enabled: bool | None = None
+    collapsed: bool | None = None
+
+
+class CidrIn(BaseModel):
+    cidr: str = Field(min_length=1, max_length=64)
+
+    @field_validator("cidr")
+    @classmethod
+    def _validate(cls, v: str) -> str:
+        try:
+            net = ipaddress.ip_network(v.strip(), strict=False)
+        except ValueError as e:
+            raise ValueError(f"invalid CIDR {v!r}: {e}") from e
+        return str(net)
+
+
+class SuggestionAction(BaseModel):
+    host_id: int = Field(ge=1)
+    group_name: str = Field(min_length=1, max_length=80)
+
+
+async def _compute_suggestions(store: Store) -> list[dict[str, Any]]:
+    """For each host whose IP falls in some other group's CIDR, surface a
+    move-suggestion unless the operator has dismissed it.
+
+    Hostname addresses (non-IP) are skipped — we don't resolve at runtime.
+    """
+    hosts = await store.list_hosts()
+    cidrs_per_group = await store.all_group_cidrs()
+    dismissed = await store.list_dismissed()
+    if not cidrs_per_group:
+        return []
+    # Pre-parse CIDR networks.
+    nets_per_group = {
+        g: [ipaddress.ip_network(c, strict=False) for c in cs]
+        for g, cs in cidrs_per_group.items()
+    }
+    out: list[dict[str, Any]] = []
+    for h in hosts:
+        try:
+            ip = ipaddress.ip_address(h.address)
+        except ValueError:
+            continue  # hostname → skip
+        for group_name, nets in nets_per_group.items():
+            if group_name == h.group_name:
+                continue
+            if (h.id, group_name) in dismissed:
+                continue
+            if any(ip in n for n in nets):
+                out.append({
+                    "host": h.to_dict(),
+                    "suggested_group": group_name,
+                })
+                break  # one suggestion per host is enough
+    return out
+
+
+@router.get("/api/groups")
+async def list_groups(request: Request) -> list[dict[str, Any]]:
+    return [g.to_dict() for g in await _store(request).list_groups()]
+
+
+@router.patch("/api/groups/{name}")
+async def patch_group(name: str, payload: GroupPatch, request: Request) -> dict[str, Any]:
+    fields = {k: v for k, v in payload.model_dump().items() if v is not None}
+    g = await _store(request).update_group(name, **fields)
+    if g is None:
+        raise HTTPException(status_code=404, detail="group not found")
+    await _hub(request).broadcast({"type": "group_updated", "group": g.to_dict()})
+    # If `enabled` flipped, scheduler must reconcile to start/stop the loops.
+    if "enabled" in fields:
+        await _reconcile(request)
+    return g.to_dict()
+
+
+@router.get("/api/groups/{name}/cidrs")
+async def list_group_cidrs(name: str, request: Request) -> list[str]:
+    return await _store(request).list_group_cidrs(name)
+
+
+@router.post("/api/groups/{name}/cidrs", status_code=status.HTTP_201_CREATED)
+async def add_group_cidr(name: str, payload: CidrIn, request: Request) -> dict[str, Any]:
+    await _store(request).add_group_cidr(name, payload.cidr)
+    await _hub(request).broadcast({
+        "type": "group_cidrs_changed", "group_name": name,
+        "cidrs": await _store(request).list_group_cidrs(name),
+    })
+    return {"group_name": name, "cidr": payload.cidr}
+
+
+@router.delete("/api/groups/{name}/cidrs", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_group_cidr(
+    name: str, request: Request, cidr: str = Query(min_length=1, max_length=64)
+) -> None:
+    ok = await _store(request).delete_group_cidr(name, cidr)
+    if not ok:
+        raise HTTPException(status_code=404, detail="cidr not in group")
+    await _hub(request).broadcast({
+        "type": "group_cidrs_changed", "group_name": name,
+        "cidrs": await _store(request).list_group_cidrs(name),
+    })
+
+
+@router.get("/api/suggestions")
+async def list_suggestions(request: Request) -> list[dict[str, Any]]:
+    return await _compute_suggestions(_store(request))
+
+
+@router.post("/api/suggestions/accept")
+async def accept_suggestion(payload: SuggestionAction, request: Request) -> dict[str, Any]:
+    store = _store(request)
+    host = await store.get_host(payload.host_id)
+    if host is None:
+        raise HTTPException(status_code=404, detail="host not found")
+    if await store.get_group(payload.group_name) is None:
+        raise HTTPException(status_code=404, detail="group not found")
+    updated = await store.update_host(payload.host_id, group_name=payload.group_name)
+    assert updated is not None
+    await _hub(request).broadcast({"type": "host_updated", "host": updated.to_dict()})
+    await _reconcile(request)
+    return updated.to_dict()
+
+
+@router.post("/api/suggestions/dismiss", status_code=status.HTTP_204_NO_CONTENT)
+async def dismiss_suggestion(payload: SuggestionAction, request: Request) -> None:
+    await _store(request).dismiss_suggestion(payload.host_id, payload.group_name)
+
+
 @router.get("/api/events")
 async def events(
     request: Request,
@@ -207,5 +356,7 @@ async def _reconcile(request: Request) -> None:
         return
     lock: asyncio.Lock = request.app.state.reconcile_lock
     async with lock:
-        hosts = await _store(request).list_hosts()
-        scheduler.reconcile(hosts)
+        store = _store(request)
+        hosts = await store.list_hosts()
+        disabled = await store.disabled_group_names()
+        scheduler.reconcile(hosts, disabled_groups=disabled)

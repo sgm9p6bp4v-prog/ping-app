@@ -38,6 +38,12 @@ class Settings(BaseSettings):
     write_flush_interval_s: float = 0.5
     write_flush_max_batch: int = 1000
 
+    # Monitoring lifecycle
+    # The server boots PAUSED. Operator presses START in the UI; pinger runs
+    # for `monitoring_duration_s` seconds, then auto-stops. A new START
+    # re-arms the timer from zero.
+    monitoring_duration_s: int = 1800  # 30 minutes
+
     # Frontend defaults
     language_default: str = "en"
 

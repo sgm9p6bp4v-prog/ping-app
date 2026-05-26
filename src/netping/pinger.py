@@ -35,18 +35,21 @@ Broadcaster = Callable[[dict], Awaitable[None]]
 def build_ping_command(host: str, *, count: int = 1, timeout_s: float = 2.0) -> list[str]:
     """Return an OS-appropriate argv for a single ping.
 
-    On Linux ``-W`` is seconds. On macOS ``-W`` is **milliseconds** (quirk):
-    we send seconds intended for Linux; on macOS the value is interpreted as
-    ms and effectively means "give up almost immediately". Dev-time tests
-    therefore use the host's natural timeout — this matters mostly for
-    air-gapped Linux deploys where the value is meaningful.
+    Semantics of the timeout flag differ across platforms — keep them
+    explicit so dev (macOS) and prod (Linux) both produce meaningful RTTs:
+
+    - **Linux** ``ping -W <seconds>`` per-packet reply timeout.
+    - **macOS** ``ping -t <seconds>`` total timeout (``-W`` would be ms).
+    - **Windows** ``ping -w <milliseconds>`` per-reply timeout.
     """
     os_name = platform.system()
     timeout_ms = max(1, int(timeout_s * 1000))
+    seconds = max(1, int(timeout_s))
     if os_name == "Windows":
         return ["ping", "-n", str(count), "-w", str(timeout_ms), host]
-    # Linux + macOS use the same flags; semantics differ (see docstring).
-    return ["ping", "-c", str(count), "-W", str(int(timeout_s)), host]
+    if os_name == "Darwin":
+        return ["ping", "-c", str(count), "-t", str(seconds), host]
+    return ["ping", "-c", str(count), "-W", str(seconds), host]
 
 
 async def do_ping(address: str, *, timeout_s: float = 2.0) -> dict:
@@ -98,16 +101,22 @@ class PingScheduler:
         # detect changes that require a task restart (Grumpy audit Sprint 2).
         self._signatures: dict[int, tuple[str, float]] = {}
         self._stop = asyncio.Event()
+        # True between start() and stop(). Reconcile no-ops while inactive
+        # so CRUD against a paused server doesn't silently start pinging.
+        self._started = False
 
     # ---- public lifecycle ----------------------------------------------------
 
     async def start(self) -> None:
-        """Start a host_loop for every enabled host in the store."""
+        """Start a host_loop for every enabled host whose group is enabled."""
+        self._started = True
+        disabled_groups = await self.store.disabled_group_names()
         for host in await self.store.list_hosts():
-            if host.enabled:
+            if host.enabled and host.group_name not in disabled_groups:
                 self._spawn(host)
 
     async def stop(self) -> None:
+        self._started = False
         self._stop.set()
         tasks = list(self._tasks.values())
         for t in tasks:
@@ -118,14 +127,25 @@ class PingScheduler:
         self._signatures.clear()
         self._stop.clear()
 
-    def reconcile(self, hosts: list[Host]) -> None:
+    @property
+    def is_started(self) -> bool:
+        return self._started
+
+    def reconcile(self, hosts: list[Host], *, disabled_groups: set[str] | None = None) -> None:
         """Sync the running host_loops with the given desired set.
 
         - Hosts present + enabled with **changed** address/interval: restart task.
         - Hosts present + enabled without changes: leave task running.
         - Hosts disabled or absent: cancel any running task.
+        - Hosts in a disabled group: cancel.
+
+        No-ops while the scheduler is not started: CRUD against a paused server
+        only updates the DB. The next `start()` will pick up the new state.
         """
-        desired = {h.id: h for h in hosts if h.enabled}
+        if not self._started:
+            return
+        dg = disabled_groups or set()
+        desired = {h.id: h for h in hosts if h.enabled and h.group_name not in dg}
 
         # cancel removed/disabled OR changed
         for hid in list(self._tasks):
