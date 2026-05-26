@@ -35,18 +35,21 @@ Broadcaster = Callable[[dict], Awaitable[None]]
 def build_ping_command(host: str, *, count: int = 1, timeout_s: float = 2.0) -> list[str]:
     """Return an OS-appropriate argv for a single ping.
 
-    On Linux ``-W`` is seconds. On macOS ``-W`` is **milliseconds** (quirk):
-    we send seconds intended for Linux; on macOS the value is interpreted as
-    ms and effectively means "give up almost immediately". Dev-time tests
-    therefore use the host's natural timeout — this matters mostly for
-    air-gapped Linux deploys where the value is meaningful.
+    Semantics of the timeout flag differ across platforms — keep them
+    explicit so dev (macOS) and prod (Linux) both produce meaningful RTTs:
+
+    - **Linux** ``ping -W <seconds>`` per-packet reply timeout.
+    - **macOS** ``ping -t <seconds>`` total timeout (``-W`` would be ms).
+    - **Windows** ``ping -w <milliseconds>`` per-reply timeout.
     """
     os_name = platform.system()
     timeout_ms = max(1, int(timeout_s * 1000))
+    seconds = max(1, int(timeout_s))
     if os_name == "Windows":
         return ["ping", "-n", str(count), "-w", str(timeout_ms), host]
-    # Linux + macOS use the same flags; semantics differ (see docstring).
-    return ["ping", "-c", str(count), "-W", str(int(timeout_s)), host]
+    if os_name == "Darwin":
+        return ["ping", "-c", str(count), "-t", str(seconds), host]
+    return ["ping", "-c", str(count), "-W", str(seconds), host]
 
 
 async def do_ping(address: str, *, timeout_s: float = 2.0) -> dict:
