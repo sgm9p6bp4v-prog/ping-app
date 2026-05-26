@@ -9,7 +9,9 @@
 
 ## 1. Vision & Zweck
 
-Ein **Server-residentes Live-Dashboard zur Ueberwachung eines gesamten privaten /24-Subnetzes (bis zu 254 Hosts) per ICMP-Ping**, LAN-weit ueber HTTP zugaenglich. Server **air-gapped** (kein Internet). Status auf einen Blick — ein gemeinsamer Statuswall fuer Studio/Buero/Lokation. Editorial Brutalist Design (siehe §6), keine Konsolen-Aesthetik, monochrom.
+Ein **Server-residentes Live-Dashboard zur Ueberwachung eines privaten /24-Subnetzes per ICMP-Ping**, LAN-weit ueber HTTP zugaenglich. Server **air-gapped** (kein Internet). Status auf einen Blick — ein gemeinsamer Statuswall fuer Studio/Buero/Lokation. Editorial Design aus `untitled.pen` (siehe §6), monochrom.
+
+**Scale:** Subnet-Kapazitaet **bis 254 Hosts** (volles /24), realer Workload **~50 Hosts** ueber den IP-Bereich verteilt. Architektur ist auf die Kapazitaet ausgelegt — Code-Pfade, Tests und Limits zielen auf 254, damit die 50-Host-Praxis komfortabel laeuft.
 
 **Nicht-Ziel:** kein Ersatz fuer Zabbix/Prometheus/Grafana. Kein Alerting per Push/Email/Webhook. Keine Multi-Tenancy. Keine Trends ueber Monate.
 
@@ -95,7 +97,7 @@ Tool ist als **vertrauenswuerdiges LAN-Tool** modelliert (Q1: Team-LAN-Tool, Q3:
 | **Plattform Server** | Linux (Ubuntu/Debian) auf dem bestehenden Zabbix-Host (Co-Location, **keine** Zabbix-Integration). Python 3.11+. **Air-gapped** — kein Internet-Zugriff im Betrieb noch bei Install. |
 | **Install-Mode** | **Offline-Bundle** als `ping-app-<version>.tar.gz` (~50-100 MB) mit allen Python-Wheels + vendored Assets + systemd-Unit + Install-Skript. Uebertragung per USB-Stick oder SCP. Entpacken nach `/opt/ping-app/`, `install.sh` legt venv (`pip install --no-index --find-links wheels/`), Daten-Dir `/var/lib/ping-app/`, systemd-Unit `ping-app.service`. Docker-Compose nur fuer Dev/Test-Setup bei uns. |
 | **Updates** | Neues Bundle bauen, alten ersetzen, `systemctl restart ping-app`. Keine Live-Update-Mechanik in v1. |
-| **Performance** | 254 Hosts × 1 Hz = 254 Pings/s nachhaltig, CPU < 15 % auf modernem Server-Hardware. UI-Update-Latenz < 200 ms. |
+| **Performance** | Bemessung auf 254 Hosts × 1 Hz Sustained (worst case) — realer Workload ~50 Hosts. Ziel: CPU < 15 %, UI-Update-Latenz < 200 ms unter Volllast. |
 | **Robustheit** | Ein toter/missgebildet konfigurierter Host stoppt nicht die anderen. SQLite-Writes nicht im Request-Hot-Path (async-Queue + Batch-Insert alle 500ms). Server-Restart < 5 s, dann automatischer Pinger-Resume. Subprocess-Storm-Schutz: Semaphore + jittered Scheduler. |
 | **Security** | LAN-only. Bind default `0.0.0.0`, CORS-Allowlist konfigurierbar (Default = LAN-CIDR aus Env). **Keine Auth** (Q-Auth: LAN-Trust). Host-Input validiert (FQDN-Regex + IPv4/IPv6). |
 | **Browser-Support** | Aktueller Chrome/Firefox/Safari (kein IE/Edge-Legacy). |
@@ -107,7 +109,7 @@ Tool ist als **vertrauenswuerdiges LAN-Tool** modelliert (Q1: Team-LAN-Tool, Q3:
 
 ## 6. Design-System (verbindlich)
 
-Quelle: `00_infos/untitled.pen` — "Editorial Dashboard"-Stil. **Francescos Cyberpunk-Look wird verworfen.**
+Quelle: `00_infos/untitled.pen` — Editorial Dashboard. Das ist die einzige Design-Vorgabe im Pencil-File (ein Screen-Frame `fQ6P8` + ein Component-Library-Frame `SPTrw` mit Label / KPI Card / Bar Item / Activity Row / Metric Row / Brutalist Block). Die Cyberpunk-Aesthetik aus Francescos urspruenglichem Prototyp-CSS (`ping-dashboard.zip`) ist eine **fruehere Iteration** — die `.pen`-Vorgabe ersetzt sie ohne weitere Diskussion.
 
 ### Variablen (aus Pencil-File)
 | Token | Wert | Verwendung |

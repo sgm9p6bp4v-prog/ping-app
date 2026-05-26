@@ -48,8 +48,8 @@ CRUD via REST-API, Aenderungen via WebSocket-Hub live an alle Tabs gepusht.
 ### Q-UI — Dashboard-Layout fuer 50 Hosts → **Gruppen-Dashboard mit Drill-Down**
 Hosts in Gruppen organisiert (z.B. nach Standort/Kategorie). Overview zeigt Gruppen-Health, Click → Host-Detail mit Chart.
 
-### Q7 — UI-Aesthetik → **Editorial Brutalist via Pencil-File (`00_infos/untitled.pen`)**
-Francescos Cyberpunk-Look wird verworfen. Inter-Font, B/W monochrom, Hairline-Trennlinien, massive Zahlen. Design-Tokens siehe PRD §6.
+### Q7 — UI-Aesthetik → **Editorial via Pencil-File (`00_infos/untitled.pen`)**
+Das `.pen`-File enthaelt **genau eine** Design-Vorgabe (Frame `fQ6P8` "01 — Editorial Dashboard" + Komponenten-Library). Inter-Font, B/W monochrom, Hairline-Trennlinien, massive Zahlen. Design-Tokens siehe PRD §6. Die Cyberpunk-Aesthetik aus dem urspruenglichen Prototyp-CSS ist eine fruehere Iteration und wird ersetzt.
 
 ### Q-Alert — Alerting → **Nein, nur Live-Dashboard**
 Visuell rot reicht (UC-1). Kein Webhook/Email/Push v1.
@@ -104,10 +104,10 @@ Nicht v1. Lokal `pytest` + `ruff` + `black` reichen vorerst. CI ergaenzbar.
 
 ## Offene Rueckspiegelung an Francesco
 
-Diese PRD wurde von Christoph aus dem Prototyp + Phase-0-Antworten erstellt. Francesco hat einige Punkte noch nicht bestaetigt:
+Phase-0-Antworten kommen von Christoph. Klaerstand mit Francesco:
 
-- **Q7 Design-Wechsel**: Francescos Cyberpunk-Look wird zugunsten Editorial Brutalist verworfen. **OK fuer Francesco?**
-- **Q4 Scope-Sprung**: Von Single-Host-Tool zu 50-Host-Server-Deploy. **Akzeptiert Francesco diesen Scope?**
-- **Q12 Lizenz**: Vorschlag MIT — **OK?**
+- **Q7 Design**: `.pen` enthaelt **eine** Design-Vorgabe (Editorial Dashboard). Die wird umgesetzt — kein Wechsel-Entscheid noetig.
+- **Q4 Scope**: Architektur fuer 254 Hosts (volles /24); real laufen ~50 Hosts im IP-Bereich. **Akzeptiert Francesco diesen Scope?**
+- **Q12 Lizenz**: MIT — **bestaetigt von Christoph 2026-05-26**.
 
-Diese drei Punkte sollten vor Sprint-Start mit Francesco geklaert werden.
+Verbleibend offen mit Francesco: nur **Q4 Scope-Bestaetigung**.
