@@ -1,0 +1,50 @@
+[Unit]
+Description=NetPing Dashboard (LAN ping monitor)
+Documentation=https://github.com/sgm9p6bp4v-prog/ping-app
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ping-app
+Group=ping-app
+WorkingDirectory=/opt/ping-app
+EnvironmentFile=-/etc/ping-app/env
+
+# ICMP requires CAP_NET_RAW; granted as an ambient capability so the unprivileged
+# user can spawn `ping` without setuid.
+AmbientCapabilities=CAP_NET_RAW
+CapabilityBoundingSet=CAP_NET_RAW
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/ping-app
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+RestrictSUIDSGID=true
+SystemCallArchitectures=native
+LockPersonality=true
+MemoryDenyWriteExecute=true
+
+ExecStart=/opt/ping-app/.venv/bin/uvicorn netping.app:app \
+  --host ${PING_BIND_HOST:-0.0.0.0} \
+  --port ${PING_PORT:-8000} \
+  --app-dir /opt/ping-app/src \
+  --log-level info \
+  --no-access-log
+
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=10
+
+# Resource limits — comfortable for 254 hosts.
+LimitNOFILE=4096
+MemoryMax=512M
+
+[Install]
+WantedBy=multi-user.target

@@ -32,3 +32,6 @@ Thumbs.db
 
 # Output / Test-Artefakte
 89_output/
+
+# Build artefacts (offline bundles)
+dist/

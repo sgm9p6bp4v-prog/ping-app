@@ -56,6 +56,43 @@ Runtime deps in `requirements.in` → compiled to `requirements.txt` via
 make lock
 ```
 
+## Deploy (air-gapped Linux server)
+
+Build the offline bundle on an internet-connected machine:
+
+```bash
+make install-dev
+tools/build_bundle.sh                              # default: manylinux2014_x86_64, py3.11
+tools/verify_bundle_offline.sh dist/ping-app-*.tar.gz
+```
+
+Result: `dist/ping-app-<version>.tar.gz` (~9 MB) containing wheels, code,
+vendored assets, install.sh, and systemd unit.
+
+Transfer (USB stick, SCP, etc.) and install on the target:
+
+```bash
+sudo tar -xzf ping-app-<version>.tar.gz -C /tmp/
+sudo /tmp/ping-app-<version>/install.sh
+```
+
+Defaults:
+- App user/group: `ping-app`
+- Code:           `/opt/ping-app`
+- Data:           `/var/lib/ping-app/ping.db`  (back this up)
+- Env:            `/etc/ping-app/env`
+- Service:        `ping-app.service` (auto-start on boot, restart on failure)
+
+Inspect / control:
+
+```bash
+systemctl status ping-app
+journalctl -u ping-app -f
+systemctl restart ping-app    # after editing /etc/ping-app/env
+```
+
+Open in browser: `http://<server-ip>:8000/`.
+
 ## License
 
 [MIT](LICENSE). Vendored libraries (Chart.js, Inter) keep their original
