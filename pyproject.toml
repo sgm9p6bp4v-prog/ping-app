@@ -22,6 +22,8 @@ testpaths = ["tests"]
 pythonpath = ["src"]
 addopts = "-ra --strict-markers"
 filterwarnings = ["error"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 
 # ---------------- ruff ------------------
 
@@ -34,6 +36,8 @@ src = ["src", "tests"]
 select = ["E", "F", "I", "B", "UP", "SIM", "PL", "RUF"]
 ignore = [
   "PLR2004", # magic-value comparison — fine in tests
+  "PLW0603", # global statement — needed for module-level singletons (config)
+  "PLR0913", # too-many-arguments — pydantic models legitimately have many
 ]
 
 [tool.ruff.lint.per-file-ignores]

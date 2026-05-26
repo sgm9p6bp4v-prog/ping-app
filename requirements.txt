@@ -4,6 +4,8 @@
 #
 #    pip-compile --output-file=requirements.txt requirements.in
 #
+aiosqlite==0.22.1
+    # via -r requirements.in
 annotated-doc==0.0.4
     # via fastapi
 annotated-types==0.7.0
@@ -23,11 +25,17 @@ httptools==0.8.0
 idna==3.16
     # via anyio
 pydantic==2.13.4
-    # via fastapi
+    # via
+    #   fastapi
+    #   pydantic-settings
 pydantic-core==2.46.4
     # via pydantic
+pydantic-settings==2.14.1
+    # via -r requirements.in
 python-dotenv==1.2.2
-    # via uvicorn
+    # via
+    #   pydantic-settings
+    #   uvicorn
 pyyaml==6.0.3
     # via uvicorn
 starlette==1.1.0
@@ -44,6 +52,7 @@ typing-inspection==0.4.2
     # via
     #   fastapi
     #   pydantic
+    #   pydantic-settings
 uvicorn[standard]==0.48.0
     # via -r requirements.in
 uvloop==0.22.1
