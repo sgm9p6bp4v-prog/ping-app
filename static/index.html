@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>NetPing</title>
+  <link rel="stylesheet" href="/css/app.css" />
+  <link rel="icon" href="data:," />
+</head>
+<body>
+  <div class="app">
+    <header class="app-header">
+      <div class="app-header__brand">
+        <div data-i18n="app.title">NetPing</div>
+        <small data-i18n="app.subtitle">LAN Latency Monitor</small>
+      </div>
+      <div class="app-header__meta">
+        <span id="clock"></span> · <span id="server-info"></span>
+      </div>
+      <div class="app-header__status" id="overall-status" data-status="online" data-i18n="header.online">ONLINE</div>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="hero__number" id="hero-online">0<small>/0</small></div>
+        <div class="kpi-grid">
+          <div class="kpi"><div class="kpi__label" data-i18n="kpi.hosts">Hosts</div><div class="kpi__value" id="kpi-hosts">0</div></div>
+          <div class="kpi"><div class="kpi__label" data-i18n="kpi.online">Online</div><div class="kpi__value" id="kpi-online">0</div></div>
+          <div class="kpi"><div class="kpi__label" data-i18n="kpi.offline">Offline</div><div class="kpi__value" id="kpi-offline">0</div></div>
+          <div class="kpi"><div class="kpi__label" data-i18n="kpi.loss">Loss</div><div class="kpi__value" id="kpi-loss">0.0%</div></div>
+        </div>
+      </section>
+
+      <section class="groups" id="groups">
+        <div class="empty-state" data-i18n="groups.empty">No hosts yet — add one with the + button.</div>
+      </section>
+    </main>
+
+    <footer class="app-footer">
+      <div class="app-footer__server">
+        <span data-i18n="footer.server">SERVER</span>
+        <span id="footer-host">—</span>
+      </div>
+      <div><span data-i18n="footer.version">VERSION</span> <span id="footer-version">—</span></div>
+      <div class="ws-indicator" id="ws-state" data-state="disconnected" data-i18n="ws.disconnected">Disconnected</div>
+      <div>
+        <span data-i18n="footer.theme">THEME</span>
+        <button id="theme-light"  data-i18n="theme.light"  aria-pressed="true">Light</button>
+        <button id="theme-dark"   data-i18n="theme.dark"   aria-pressed="false">Dark</button>
+      </div>
+      <div>
+        <span data-i18n="footer.language">LANGUAGE</span>
+        <button id="lang-en" data-i18n="lang.en" aria-pressed="true">EN</button>
+        <button id="lang-it" data-i18n="lang.it" aria-pressed="false">IT</button>
+      </div>
+    </footer>
+
+    <button class="fab" id="fab-add" aria-label="Add host">+</button>
+  </div>
+
+  <script src="/vendor/chart.umd.min.js"></script>
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>
