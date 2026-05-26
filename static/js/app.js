@@ -8,9 +8,14 @@ import { loadLang, initLangButtons, t } from "./i18n.js";
 import { Store } from "./store.js";
 import { connect as connectWS } from "./ws.js";
 import { api } from "./api.js";
-import { render as renderDashboard, onHostClick, onHostEdit } from "./dashboard.js";
+import {
+  render as renderDashboard, onHostClick, onHostEdit, onGroupSettings, setViewMode,
+} from "./dashboard.js";
 import { open as openDrill } from "./drilldown.js";
 import { openAdd, openEdit } from "./editor.js";
+import * as monitoring from "./monitoring.js";
+import { open as openGroupSettings } from "./group-settings.js";
+import { refresh as refreshSuggestions } from "./suggestions.js";
 
 // ---- theme ------------------------------------------------------------------
 
@@ -59,6 +64,15 @@ async function loadHosts() {
   }
 }
 
+async function loadGroups() {
+  try {
+    const groups = await api.listGroups();
+    Store.setGroups(groups);
+  } catch (e) {
+    console.warn("loadGroups failed", e);
+  }
+}
+
 // ---- WebSocket --------------------------------------------------------------
 
 function onWsMessage(msg) {
@@ -72,9 +86,21 @@ function onWsMessage(msg) {
     case "host_created":
     case "host_updated":
       Store.upsertHost(msg.host);
+      refreshSuggestions();
       break;
     case "host_deleted":
       Store.deleteHost(msg.host_id);
+      refreshSuggestions();
+      break;
+    case "group_updated":
+      Store.upsertGroup(msg.group);
+      refreshSuggestions();
+      break;
+    case "group_cidrs_changed":
+      refreshSuggestions();
+      break;
+    case "monitoring_state":
+      monitoring.onWsState(msg);
       break;
     default:
       console.warn("ws: unknown message type", msg.type, msg);
@@ -91,7 +117,20 @@ function onWsState(state) {
 
 onHostClick((id) => openDrill(id));
 onHostEdit((id) => openEdit(id));
+onGroupSettings((name) => openGroupSettings(name));
 document.getElementById("fab-add").addEventListener("click", openAdd);
+
+// ---- View toggle ------------------------------------------------------------
+
+function setView(mode) {
+  setViewMode(mode);
+  document.getElementById("view-groups").setAttribute("aria-pressed", mode === "groups");
+  document.getElementById("view-ip").setAttribute("aria-pressed", mode === "ip");
+  localStorage.setItem("netping.view", mode);
+  renderDashboard();
+}
+document.getElementById("view-groups").addEventListener("click", () => setView("groups"));
+document.getElementById("view-ip").addEventListener("click", () => setView("ip"));
 
 // ---- subscribe dashboard re-render -----------------------------------------
 
@@ -123,8 +162,11 @@ Store.subscribe(() => {
   );
 
   await refreshServerInfo();
+  await loadGroups();
   await loadHosts();
-  renderDashboard();
+  await monitoring.init();
+  await refreshSuggestions();
+  setView(localStorage.getItem("netping.view") === "ip" ? "ip" : "groups");
 
   const wsProto = location.protocol === "https:" ? "wss" : "ws";
   connectWS({

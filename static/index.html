@@ -17,7 +17,16 @@
       <div class="app-header__meta">
         <span id="clock"></span> · <span id="server-info"></span>
       </div>
-      <div class="app-header__status" id="overall-status" data-status="online" data-i18n="header.online">ONLINE</div>
+      <div class="app-header__right">
+        <div class="monitoring-control">
+          <button id="monitoring-toggle" data-state="paused">START</button>
+          <div class="monitoring-status">
+            <span id="monitoring-state" data-i18n="monitor.paused">PAUSED</span>
+            <span id="monitoring-countdown"></span>
+          </div>
+        </div>
+        <div class="app-header__status" id="overall-status" data-status="online" data-i18n="header.online">ONLINE</div>
+      </div>
     </header>
 
     <main>
@@ -30,6 +39,15 @@
           <div class="kpi"><div class="kpi__label" data-i18n="kpi.loss">Loss</div><div class="kpi__value" id="kpi-loss">0.0%</div></div>
         </div>
       </section>
+
+      <div class="view-toggle-bar">
+        <div class="view-toggle" role="tablist">
+          <button id="view-groups" aria-pressed="true" data-i18n="view.groups">GROUPS</button>
+          <button id="view-ip" aria-pressed="false" data-i18n="view.ip">IP</button>
+        </div>
+      </div>
+
+      <section class="suggestions" id="suggestions"></section>
 
       <section class="groups" id="groups">
         <div class="empty-state" data-i18n="groups.empty">No hosts yet — add one with the + button.</div>

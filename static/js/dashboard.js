@@ -3,6 +3,7 @@
  */
 import { Store, SLOW_THRESHOLD_MS } from "./store.js";
 import { t } from "./i18n.js";
+import { api } from "./api.js";
 
 const groupsEl = document.getElementById("groups");
 const heroOnlineEl = document.getElementById("hero-online");
@@ -22,9 +23,55 @@ export function onHostEdit(handler) {
   onHostEditHandler = handler;
 }
 
+let onGroupSettingsHandler = null;
+export function onGroupSettings(handler) {
+  onGroupSettingsHandler = handler;
+}
+
+let viewMode = "groups";  // 'groups' | 'ip'
+export function setViewMode(mode) {
+  viewMode = mode === "ip" ? "ip" : "groups";
+}
+
 export function render() {
   renderKpis();
-  renderGroups();
+  if (viewMode === "ip") renderIpList();
+  else renderGroups();
+}
+
+function renderIpList() {
+  const hosts = [...Store.hosts.values()].slice().sort(ipCompare);
+  if (hosts.length === 0) {
+    groupsEl.innerHTML = `<div class="empty-state">${t("groups.empty")}</div>`;
+    return;
+  }
+  groupsEl.innerHTML = `
+    <section class="group" data-group="__ip_view__">
+      <header class="group__head">
+        <span></span>
+        <h2 class="group__name">${t("view.ip_title")}</h2>
+        <div class="group__meta">${hosts.length}</div>
+        <span></span>
+      </header>
+      <div class="host-grid">${hosts.map(hostCardHtml).join("")}</div>
+    </section>
+  `;
+  attachHostCardHandlers();
+}
+
+function ipCompare(a, b) {
+  // Sort IPv4 numerically; everything else lexicographically after IPs.
+  const pa = parseIp(a.address), pb = parseIp(b.address);
+  if (pa !== null && pb !== null) return pa - pb;
+  if (pa !== null) return -1;
+  if (pb !== null) return 1;
+  return a.address.localeCompare(b.address);
+}
+function parseIp(addr) {
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(addr);
+  if (!m) return null;
+  const [_, a, b, c, d] = m;
+  return ((+a) << 24 >>> 0) + ((+b) << 16) + ((+c) << 8) + (+d);
 }
 
 function renderKpis() {
@@ -50,21 +97,58 @@ function renderGroups() {
   }
   const html = [];
   for (const [groupName, hosts] of grouped) {
+    const gstate = Store.groupState(groupName);
+    const collapsed = gstate.collapsed || !gstate.enabled; // disabled groups default to collapsed
     const online = hosts.filter((h) => statusOf(h.id) === "online" || statusOf(h.id) === "slow").length;
     const offline = hosts.filter((h) => statusOf(h.id) === "offline").length;
+    const stateLabel = gstate.enabled ? `${online} ON · ${offline} OFF` : t("group.disabled");
     html.push(`
-      <section class="group" data-group="${escapeAttr(groupName)}">
+      <section class="group" data-group="${escapeAttr(groupName)}"
+               data-enabled="${gstate.enabled}" data-collapsed="${collapsed}">
         <header class="group__head">
+          <button class="group__collapse" data-group-action="collapse"
+                  aria-label="${escapeAttr(t("group.collapse"))}"
+                  aria-expanded="${!collapsed}">${collapsed ? "▶" : "▼"}</button>
           <h2 class="group__name">${escapeHtml(groupName)}</h2>
-          <div class="group__meta">${hosts.length} · ${online} ON · ${offline} OFF</div>
+          <div class="group__meta">${hosts.length} · ${stateLabel}</div>
+          <button class="group__toggle" data-group-action="toggle"
+                  aria-pressed="${!gstate.enabled}"
+                  title="${escapeAttr(gstate.enabled ? t("group.disable_hint") : t("group.enable_hint"))}">
+            ${gstate.enabled ? t("group.disable") : t("group.enable")}
+          </button>
+          <button class="group__settings" data-group-action="settings"
+                  aria-label="${escapeAttr(t("group.settings"))}"
+                  title="${escapeAttr(t("group.settings"))}">⚙</button>
         </header>
-        <div class="host-grid">
-          ${hosts.map(hostCardHtml).join("")}
-        </div>
+        ${collapsed ? "" : `<div class="host-grid">${hosts.map(hostCardHtml).join("")}</div>`}
       </section>
     `);
   }
   groupsEl.innerHTML = html.join("");
+  attachHostCardHandlers();
+  groupsEl.querySelectorAll("[data-group-action]").forEach((btn) => {
+    btn.addEventListener("click", async (ev) => {
+      ev.stopPropagation();
+      const section = btn.closest(".group");
+      const name = section.dataset.group;
+      const action = btn.dataset.groupAction;
+      const current = Store.groupState(name);
+      try {
+        if (action === "collapse") {
+          await api.updateGroup(name, { collapsed: !current.collapsed });
+        } else if (action === "toggle") {
+          await api.updateGroup(name, { enabled: !current.enabled });
+        } else if (action === "settings") {
+          if (onGroupSettingsHandler) onGroupSettingsHandler(name);
+        }
+      } catch (e) {
+        console.warn("group action failed", e);
+      }
+    });
+  });
+}
+
+function attachHostCardHandlers() {
   groupsEl.querySelectorAll("[data-host-id]").forEach((el) => {
     const id = Number(el.dataset.hostId);
     const openDetail = (ev) => {

@@ -21,6 +21,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from .api import router as api_router
 from .config import get_settings
+from .monitoring import MonitoringController
 from .pinger import PingScheduler
 from .store import Store
 from .ws import WebSocketHub
@@ -66,10 +67,15 @@ async def lifespan(app: FastAPI):
         timeout_s=settings.ping_timeout_s,
         broadcaster=hub.broadcast,
     )
-    await scheduler.start()
+    # Pinger is NOT started here — boots PAUSED. Operator presses START in
+    # the UI; MonitoringController handles the 30-min auto-stop timer.
+    monitoring = MonitoringController(
+        scheduler, hub, duration_s=settings.monitoring_duration_s
+    )
     app.state.store = store
     app.state.hub = hub
     app.state.scheduler = scheduler
+    app.state.monitoring = monitoring
     # Reconcile lock is created here (not lazily in the API handler) so two
     # concurrent first-requests cannot race-create two separate locks.
     app.state.reconcile_lock = asyncio.Lock()
@@ -82,7 +88,7 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         purge_task.cancel()
-        await scheduler.stop()
+        await monitoring.shutdown()
         await store.close()
 
 

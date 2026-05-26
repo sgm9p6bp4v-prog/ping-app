@@ -9,6 +9,7 @@ const OFFLINE_FAIL_STREAK = 3;
 export const Store = {
   hosts: new Map(), // host_id -> host (full record)
   samples: new Map(), // host_id -> { samples: [], stats: {...}, status: "online"|"slow"|"offline"|"idle" }
+  groups: new Map(), // name -> { name, enabled, collapsed }
   serverInfo: null,
   listeners: new Set(),
 
@@ -19,6 +20,21 @@ export const Store = {
       if (!this.hosts.has(id)) this.samples.delete(id);
     }
     this.notify();
+  },
+
+  setGroups(list) {
+    this.groups.clear();
+    for (const g of list) this.groups.set(g.name, g);
+    this.notify();
+  },
+
+  upsertGroup(g) {
+    this.groups.set(g.name, g);
+    this.notify();
+  },
+
+  groupState(name) {
+    return this.groups.get(name) ?? { name, enabled: true, collapsed: false };
   },
 
   upsertHost(h) {

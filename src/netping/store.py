@@ -68,6 +68,27 @@ CREATE TABLE IF NOT EXISTS events (
 
 CREATE INDEX IF NOT EXISTS idx_events_host_ts ON events(host_id, ts);
 CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts);
+
+CREATE TABLE IF NOT EXISTS groups (
+  name       TEXT    PRIMARY KEY,
+  enabled    INTEGER NOT NULL DEFAULT 1,
+  collapsed  INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS group_cidrs (
+  group_name TEXT    NOT NULL,
+  cidr       TEXT    NOT NULL,
+  PRIMARY KEY (group_name, cidr),
+  FOREIGN KEY (group_name) REFERENCES groups(name) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS dismissed_suggestions (
+  host_id    INTEGER NOT NULL,
+  group_name TEXT    NOT NULL,
+  PRIMARY KEY (host_id, group_name),
+  FOREIGN KEY (host_id) REFERENCES hosts(id) ON DELETE CASCADE,
+  FOREIGN KEY (group_name) REFERENCES groups(name) ON DELETE CASCADE
+);
 """
 
 
@@ -127,6 +148,16 @@ class Event:
     ts: str
     type: str
     message: str | None
+
+
+@dataclass(slots=True)
+class Group:
+    name: str
+    enabled: bool
+    collapsed: bool
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"name": self.name, "enabled": self.enabled, "collapsed": self.collapsed}
 
 
 # ----------------------------------------------------------------------------- store
@@ -225,6 +256,11 @@ class Store:
         enabled: bool = True,
     ) -> Host:
         async with self._conn() as db:
+            # Ensure the group row exists so the operator can toggle it later.
+            await db.execute(
+                "INSERT OR IGNORE INTO groups (name, enabled, collapsed) VALUES (?, 1, 0)",
+                (group_name,),
+            )
             cur = await db.execute(
                 "INSERT INTO hosts (name, address, group_name, interval_s, enabled) "
                 "VALUES (?, ?, ?, ?, ?)",
@@ -235,6 +271,137 @@ class Store:
         host = await self.get_host(host_id)
         assert host is not None
         return host
+
+    # ---- groups --------------------------------------------------------------
+
+    async def list_groups(self) -> list[Group]:
+        # Auto-create rows for any group_name in hosts that doesn't have one yet
+        # (defensive — covers DBs that pre-date the groups table).
+        async with self._conn() as db:
+            await db.execute(
+                "INSERT OR IGNORE INTO groups (name, enabled, collapsed) "
+                "SELECT DISTINCT group_name, 1, 0 FROM hosts"
+            )
+            await db.commit()
+            async with db.execute(
+                "SELECT g.name, g.enabled, g.collapsed FROM groups g "
+                "ORDER BY g.name"
+            ) as cur:
+                rows = await cur.fetchall()
+        return [Group(name=r["name"], enabled=bool(r["enabled"]),
+                      collapsed=bool(r["collapsed"])) for r in rows]
+
+    async def get_group(self, name: str) -> Group | None:
+        async with self._conn() as db, db.execute(
+            "SELECT name, enabled, collapsed FROM groups WHERE name = ?", (name,),
+        ) as cur:
+            row = await cur.fetchone()
+        if row is None:
+            return None
+        return Group(name=row["name"], enabled=bool(row["enabled"]),
+                     collapsed=bool(row["collapsed"]))
+
+    async def update_group(
+        self, name: str, *, enabled: bool | None = None, collapsed: bool | None = None
+    ) -> Group | None:
+        sets: list[str] = []
+        vals: list[Any] = []
+        if enabled is not None:
+            sets.append("enabled = ?")
+            vals.append(int(enabled))
+        if collapsed is not None:
+            sets.append("collapsed = ?")
+            vals.append(int(collapsed))
+        if not sets:
+            return await self.get_group(name)
+        vals.append(name)
+        async with self._conn() as db:
+            # upsert: if row missing, create it with the provided values.
+            await db.execute(
+                "INSERT OR IGNORE INTO groups (name, enabled, collapsed) "
+                "VALUES (?, 1, 0)", (name,),
+            )
+            await db.execute(f"UPDATE groups SET {', '.join(sets)} WHERE name = ?", vals)
+            await db.commit()
+        return await self.get_group(name)
+
+    async def list_group_cidrs(self, group_name: str) -> list[str]:
+        async with (
+            self._conn() as db,
+            db.execute(
+                "SELECT cidr FROM group_cidrs WHERE group_name = ? ORDER BY cidr",
+                (group_name,),
+            ) as cur,
+        ):
+            return [r["cidr"] for r in await cur.fetchall()]
+
+    async def add_group_cidr(self, group_name: str, cidr: str) -> None:
+        async with self._conn() as db:
+            await db.execute(
+                "INSERT OR IGNORE INTO groups (name, enabled, collapsed) VALUES (?, 1, 0)",
+                (group_name,),
+            )
+            await db.execute(
+                "INSERT OR IGNORE INTO group_cidrs (group_name, cidr) VALUES (?, ?)",
+                (group_name, cidr),
+            )
+            await db.commit()
+
+    async def delete_group_cidr(self, group_name: str, cidr: str) -> bool:
+        async with self._conn() as db:
+            cur = await db.execute(
+                "DELETE FROM group_cidrs WHERE group_name = ? AND cidr = ?",
+                (group_name, cidr),
+            )
+            await db.commit()
+            return cur.rowcount > 0
+
+    async def all_group_cidrs(self) -> dict[str, list[str]]:
+        """Group-name → list of CIDR strings, for suggestion compute."""
+        async with (
+            self._conn() as db,
+            db.execute(
+                "SELECT group_name, cidr FROM group_cidrs ORDER BY group_name, cidr"
+            ) as cur,
+        ):
+            rows = await cur.fetchall()
+        out: dict[str, list[str]] = {}
+        for r in rows:
+            out.setdefault(r["group_name"], []).append(r["cidr"])
+        return out
+
+    async def list_dismissed(self) -> set[tuple[int, str]]:
+        async with (
+            self._conn() as db,
+            db.execute("SELECT host_id, group_name FROM dismissed_suggestions") as cur,
+        ):
+            return {(r["host_id"], r["group_name"]) for r in await cur.fetchall()}
+
+    async def dismiss_suggestion(self, host_id: int, group_name: str) -> None:
+        async with self._conn() as db:
+            await db.execute(
+                "INSERT OR IGNORE INTO dismissed_suggestions (host_id, group_name) VALUES (?, ?)",
+                (host_id, group_name),
+            )
+            await db.commit()
+
+    async def undismiss_suggestion(self, host_id: int, group_name: str) -> bool:
+        async with self._conn() as db:
+            cur = await db.execute(
+                "DELETE FROM dismissed_suggestions WHERE host_id = ? AND group_name = ?",
+                (host_id, group_name),
+            )
+            await db.commit()
+            return cur.rowcount > 0
+
+    async def disabled_group_names(self) -> set[str]:
+        async with self._conn() as db, db.execute(
+            "SELECT name FROM groups WHERE enabled = 0"
+        ) as cur:
+            rows = await cur.fetchall()
+        return {r["name"] for r in rows}
+
+    # ---- hosts (continued) ---------------------------------------------------
 
     async def update_host(self, host_id: int, **fields: Any) -> Host | None:
         allowed = {"name", "address", "group_name", "interval_s", "enabled"}

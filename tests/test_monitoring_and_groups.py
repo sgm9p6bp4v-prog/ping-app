@@ -1,0 +1,154 @@
+"""Tests for the monitoring lifecycle + per-group enable/collapse."""
+
+from __future__ import annotations
+
+import asyncio
+from collections.abc import AsyncIterator
+from pathlib import Path
+
+import pytest
+from fastapi import FastAPI
+from httpx import ASGITransport, AsyncClient
+
+from netping.api import router
+from netping.app import CSRFGuardMiddleware
+from netping.monitoring import MonitoringController
+from netping.pinger import PingScheduler
+from netping.store import Store
+from netping.ws import WebSocketHub
+
+
+@pytest.fixture
+async def app(tmp_path: Path) -> AsyncIterator[FastAPI]:
+    a = FastAPI()
+    a.add_middleware(CSRFGuardMiddleware)
+    store = Store(tmp_path / "ping.db", flush_interval_s=0.05)
+    await store.open()
+    store.start_writer()
+    hub = WebSocketHub()
+    sched = PingScheduler(store, max_concurrent=4, timeout_s=0.5)
+    a.state.store = store
+    a.state.hub = hub
+    a.state.scheduler = sched
+    a.state.monitoring = MonitoringController(sched, hub, duration_s=2)
+    a.state.reconcile_lock = asyncio.Lock()
+    a.include_router(router)
+    yield a
+    await a.state.monitoring.shutdown()
+    await store.close()
+
+
+@pytest.fixture
+async def client(app: FastAPI) -> AsyncIterator[AsyncClient]:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        headers={"X-Requested-With": "fetch"},
+    ) as c:
+        yield c
+
+
+# --- monitoring -------------------------------------------------------------
+
+
+async def test_monitoring_starts_paused(client: AsyncClient) -> None:
+    r = await client.get("/api/monitoring")
+    body = r.json()
+    assert body["active"] is False
+    assert body["expires_at"] is None
+
+
+async def test_monitoring_start_sets_expiry(client: AsyncClient) -> None:
+    r = await client.post("/api/monitoring/start")
+    body = r.json()
+    assert body["active"] is True
+    assert body["expires_at"] is not None
+    assert body["duration_s"] == 2
+
+
+async def test_monitoring_stop_clears_expiry(client: AsyncClient) -> None:
+    await client.post("/api/monitoring/start")
+    r = await client.post("/api/monitoring/stop")
+    body = r.json()
+    assert body["active"] is False
+    assert body["expires_at"] is None
+
+
+async def test_monitoring_auto_stops_after_duration(client: AsyncClient, app: FastAPI) -> None:
+    """Timer wired into MonitoringController auto-stops the scheduler."""
+    await client.post("/api/monitoring/start")
+    assert (await client.get("/api/monitoring")).json()["active"] is True
+    # duration_s = 2 in fixture; wait a bit longer than that
+    await asyncio.sleep(2.5)
+    assert (await client.get("/api/monitoring")).json()["active"] is False
+
+
+# --- groups -----------------------------------------------------------------
+
+
+async def test_groups_auto_created_with_host(client: AsyncClient) -> None:
+    await client.post(
+        "/api/hosts", json={"name": "x", "address": "1.1.1.1", "group_name": "external"}
+    )
+    r = await client.get("/api/groups")
+    names = [g["name"] for g in r.json()]
+    assert "external" in names
+
+
+async def test_group_default_enabled_not_collapsed(client: AsyncClient) -> None:
+    await client.post(
+        "/api/hosts", json={"name": "x", "address": "1.1.1.1", "group_name": "internal"}
+    )
+    r = await client.get("/api/groups")
+    g = next(g for g in r.json() if g["name"] == "internal")
+    assert g["enabled"] is True
+    assert g["collapsed"] is False
+
+
+async def test_group_patch_disable(client: AsyncClient) -> None:
+    await client.post(
+        "/api/hosts", json={"name": "x", "address": "1.1.1.1", "group_name": "external"}
+    )
+    r = await client.patch("/api/groups/external", json={"enabled": False})
+    assert r.status_code == 200
+    assert r.json()["enabled"] is False
+
+
+async def test_group_patch_collapse(client: AsyncClient) -> None:
+    await client.post(
+        "/api/hosts", json={"name": "x", "address": "1.1.1.1", "group_name": "external"}
+    )
+    r = await client.patch("/api/groups/external", json={"collapsed": True})
+    assert r.status_code == 200
+    assert r.json()["collapsed"] is True
+
+
+async def test_group_disable_stops_pinging_after_reconcile(
+    client: AsyncClient, app: FastAPI
+) -> None:
+    """When a group is disabled while monitoring is active, the scheduler
+    must cancel that group's host loops."""
+    await client.post(
+        "/api/hosts", json={"name": "x", "address": "1.1.1.1", "group_name": "external"}
+    )
+    await client.post("/api/monitoring/start")
+    sched: PingScheduler = app.state.scheduler
+    # let scheduler spawn the task
+    await asyncio.sleep(0.05)
+    assert 1 in sched._tasks
+
+    await client.patch("/api/groups/external", json={"enabled": False})
+    await asyncio.sleep(0.05)
+    assert 1 not in sched._tasks
+
+    await client.patch("/api/groups/external", json={"enabled": True})
+    await asyncio.sleep(0.05)
+    assert 1 in sched._tasks
+
+
+async def test_patch_unknown_group_404(client: AsyncClient) -> None:
+    # update_group upserts only if the row exists; we test the not-found path
+    # by patching with empty body so no upsert and no row.
+    r = await client.patch("/api/groups/nonexistent", json={})
+    assert r.status_code == 404

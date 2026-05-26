@@ -101,16 +101,22 @@ class PingScheduler:
         # detect changes that require a task restart (Grumpy audit Sprint 2).
         self._signatures: dict[int, tuple[str, float]] = {}
         self._stop = asyncio.Event()
+        # True between start() and stop(). Reconcile no-ops while inactive
+        # so CRUD against a paused server doesn't silently start pinging.
+        self._started = False
 
     # ---- public lifecycle ----------------------------------------------------
 
     async def start(self) -> None:
-        """Start a host_loop for every enabled host in the store."""
+        """Start a host_loop for every enabled host whose group is enabled."""
+        self._started = True
+        disabled_groups = await self.store.disabled_group_names()
         for host in await self.store.list_hosts():
-            if host.enabled:
+            if host.enabled and host.group_name not in disabled_groups:
                 self._spawn(host)
 
     async def stop(self) -> None:
+        self._started = False
         self._stop.set()
         tasks = list(self._tasks.values())
         for t in tasks:
@@ -121,14 +127,25 @@ class PingScheduler:
         self._signatures.clear()
         self._stop.clear()
 
-    def reconcile(self, hosts: list[Host]) -> None:
+    @property
+    def is_started(self) -> bool:
+        return self._started
+
+    def reconcile(self, hosts: list[Host], *, disabled_groups: set[str] | None = None) -> None:
         """Sync the running host_loops with the given desired set.
 
         - Hosts present + enabled with **changed** address/interval: restart task.
         - Hosts present + enabled without changes: leave task running.
         - Hosts disabled or absent: cancel any running task.
+        - Hosts in a disabled group: cancel.
+
+        No-ops while the scheduler is not started: CRUD against a paused server
+        only updates the DB. The next `start()` will pick up the new state.
         """
-        desired = {h.id: h for h in hosts if h.enabled}
+        if not self._started:
+            return
+        dg = disabled_groups or set()
+        desired = {h.id: h for h in hosts if h.enabled and h.group_name not in dg}
 
         # cancel removed/disabled OR changed
         for hid in list(self._tasks):
