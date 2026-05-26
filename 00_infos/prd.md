@@ -1,15 +1,15 @@
 # PRD — NetPing Dashboard
 
-> **Status:** v0.2 — Phase-0 Klaerungen mit Christoph eingearbeitet (2026-05-25)
-> **Vorgaenger:** v0.1 (Reverse-Engineering aus `ping-dashboard.zip`)
+> **Status:** v0.3 — Air-Gap + 254-Host-Scale + MIT-Lizenz eingearbeitet (2026-05-25)
+> **Vorgaenger:** v0.2 (50 Hosts, internet-fähig angenommen)
 > **Autor:** Christoph / Varga (im Auftrag fuer Francesco)
-> **Naechster Schritt:** Implementierungsplan v0.2 (siehe `prd-plan.md`).
+> **Naechster Schritt:** Implementierungsplan v0.3 (siehe `prd-plan.md`).
 
 ---
 
 ## 1. Vision & Zweck
 
-Ein **Server-residentes Live-Dashboard zur Ueberwachung von bis zu 50 Hosts per ICMP-Ping**, LAN-weit ueber HTTP zugaenglich. Status auf einen Blick — ein gemeinsamer Statuswall fuer Studio/Buero/Lokation. Editorial Brutalist Design (siehe §10), keine Konsolen-Aesthetik, monochrom.
+Ein **Server-residentes Live-Dashboard zur Ueberwachung eines gesamten privaten /24-Subnetzes (bis zu 254 Hosts) per ICMP-Ping**, LAN-weit ueber HTTP zugaenglich. Server **air-gapped** (kein Internet). Status auf einen Blick — ein gemeinsamer Statuswall fuer Studio/Buero/Lokation. Editorial Brutalist Design (siehe §6), keine Konsolen-Aesthetik, monochrom.
 
 **Nicht-Ziel:** kein Ersatz fuer Zabbix/Prometheus/Grafana. Kein Alerting per Push/Email/Webhook. Keine Multi-Tenancy. Keine Trends ueber Monate.
 
@@ -41,10 +41,12 @@ Tool ist als **vertrauenswuerdiges LAN-Tool** modelliert (Q1: Team-LAN-Tool, Q3:
 ## 4. Funktionale Anforderungen
 
 ### 4.1 Ping-Engine
-- ICMP-Echo per Subprocess pro Host. Auf Linux/macOS: `ping -c 1 -W 2`. Wir deployen Linux — Windows-Server explizit **out of scope**.
+- ICMP-Echo per Subprocess pro Host. Auf Linux: `ping -c 1 -W 2`. Linux-only.
 - **1 Hz default**, pro Host konfigurierbar (z.B. 5 s fuer wenig kritische Hosts).
-- 50 Hosts parallel: Concurrency-Limit (z.B. asyncio Semaphore = 50) damit Subprocess-Storm OS nicht ueberlastet.
+- **254 Hosts parallel** (gesamtes /24-Subnetz): Concurrency-Limit (asyncio Semaphore, Default 64) + gestaffelter Scheduler damit nicht 254 Subprocesses gleichzeitig starten.
+- Bei 254 Hosts × 1 Hz = 254 Subprocesses/s nachhaltig. Lasttest gegen Mock-Subprocess-Wrapper (Sprint 4).
 - Pro Ping: `{rtt_ms, success, error, ts, host_id}`.
+- **Hosts werden statisch ueber UI gepflegt** (keine Auto-Discovery, kein Subnet-Sweep) — siehe Q-LAN.
 
 ### 4.2 Backend (FastAPI + Python 3.11+)
 - **Module:** `app.py` (FastAPI-Setup), `pinger.py` (Ping-Engine + Concurrency), `parser.py` (ping-Output-Parsing), `store.py` (SQLite-Layer), `ws.py` (WebSocket-Hub), `api.py` (REST-CRUD), `config.py` (Settings via env + defaults).
@@ -60,6 +62,7 @@ Tool ist als **vertrauenswuerdiges LAN-Tool** modelliert (Q1: Team-LAN-Tool, Q3:
 
 ### 4.3 Frontend (Single-Page-App, Vanilla JS + Chart.js)
 - **Module:** `index.html`, `static/css/app.css`, `static/js/app.js` (+ optionale Sub-Module `dashboard.js`, `drilldown.js`, `editor.js`).
+- **Air-Gap-Zwingend: alle Assets vendored, NICHTS vom CDN.** Chart.js als minified Build unter `static/vendor/chart.umd.min.js`, Inter-Font als WOFF2-Dateien unter `static/vendor/inter/`. Keine `<link href="https://fonts.googleapis.com/...">`-Eintraege. Lizenz-Header der vendored Libraries beibehalten.
 - **Layouts:**
   - **Gruppen-Dashboard (Default):** Gruppen-Kacheln mit aggregiertem Status (alle gruen / einige gelb / mind. eines rot). Per Gruppe Liste der Host-Cards (Status-LED, Hostname, RTT-aktuell, Loss%).
   - **Drill-Down:** Vollbild-Detail fuer einen Host mit 60-s-Chart, History-Toggle (1h/24h/7d), Outage-Log.
@@ -89,13 +92,15 @@ Tool ist als **vertrauenswuerdiges LAN-Tool** modelliert (Q1: Team-LAN-Tool, Q3:
 
 | Bereich | Anforderung |
 |---------|-------------|
-| **Plattform Server** | Linux (Ubuntu/Debian) auf dem bestehenden Zabbix-Host (Co-Location, **keine** Zabbix-Integration). Python 3.11+. |
-| **Install-Mode** | systemd-Unit `ping-app.service`, venv unter `/opt/ping-app/.venv`, Code unter `/opt/ping-app/src`, Daten unter `/var/lib/ping-app/`. Docker-Compose als Test-/Dev-Fallback. |
-| **Performance** | 50 Hosts × 1 Hz = 50 Pings/s nachhaltig, CPU < 5 % auf modernem Server-Hardware. UI-Update-Latenz < 200 ms. |
-| **Robustheit** | Ein toter/missgebildet konfigurierter Host stoppt nicht die anderen. SQLite-Writes nicht im Request-Hot-Path (async-Queue). Server-Restart < 5 s, dann automatischer Pinger-Resume. |
+| **Plattform Server** | Linux (Ubuntu/Debian) auf dem bestehenden Zabbix-Host (Co-Location, **keine** Zabbix-Integration). Python 3.11+. **Air-gapped** — kein Internet-Zugriff im Betrieb noch bei Install. |
+| **Install-Mode** | **Offline-Bundle** als `ping-app-<version>.tar.gz` (~50-100 MB) mit allen Python-Wheels + vendored Assets + systemd-Unit + Install-Skript. Uebertragung per USB-Stick oder SCP. Entpacken nach `/opt/ping-app/`, `install.sh` legt venv (`pip install --no-index --find-links wheels/`), Daten-Dir `/var/lib/ping-app/`, systemd-Unit `ping-app.service`. Docker-Compose nur fuer Dev/Test-Setup bei uns. |
+| **Updates** | Neues Bundle bauen, alten ersetzen, `systemctl restart ping-app`. Keine Live-Update-Mechanik in v1. |
+| **Performance** | 254 Hosts × 1 Hz = 254 Pings/s nachhaltig, CPU < 15 % auf modernem Server-Hardware. UI-Update-Latenz < 200 ms. |
+| **Robustheit** | Ein toter/missgebildet konfigurierter Host stoppt nicht die anderen. SQLite-Writes nicht im Request-Hot-Path (async-Queue + Batch-Insert alle 500ms). Server-Restart < 5 s, dann automatischer Pinger-Resume. Subprocess-Storm-Schutz: Semaphore + jittered Scheduler. |
 | **Security** | LAN-only. Bind default `0.0.0.0`, CORS-Allowlist konfigurierbar (Default = LAN-CIDR aus Env). **Keine Auth** (Q-Auth: LAN-Trust). Host-Input validiert (FQDN-Regex + IPv4/IPv6). |
 | **Browser-Support** | Aktueller Chrome/Firefox/Safari (kein IE/Edge-Legacy). |
-| **Footprint** | < 200 MB Disk inkl. venv. < 150 MB RAM idle, < 300 MB unter Last. |
+| **Footprint** | < 250 MB Disk inkl. venv + vendored Assets. < 150 MB RAM idle, < 400 MB RAM unter Volllast (254 Hosts). |
+| **Lizenz** | MIT (siehe `LICENSE` im Repo-Root). |
 | **Logs** | `journalctl -u ping-app` (stdout via systemd). Strukturierte Log-Lines (JSON optional via Env). |
 
 ---
@@ -146,21 +151,25 @@ Implementierung: CSS-Custom-Properties pro Token, Theme-Switch via `data-theme="
 - Multi-User-Berechtigungen
 - Trend-Analyse > 7 Tage (Retention-Cap)
 - Docker als primaerer Deploy-Pfad (nur Dev-Fallback)
+- **Auto-Discovery** / Subnet-Sweep (Q-LAN: statische UI-Pflege)
+- **Internet-Zugriff** im Betrieb (Q-Offline: air-gapped) — keine externen Telemetrie/Update-Calls, keine CDN-Loads
+- Live-Update-Mechanik (Update = neues Bundle deployen)
 
 ---
 
 ## 8. Akzeptanzkriterien v1
 
-1. systemd-Service startet auf Ubuntu/Debian-Server, autostart on boot.
-2. UI auf `http://<server>:<port>/` zeigt Gruppen-Dashboard mit allen konfigurierten Hosts.
+1. **Offline-Install:** `ping-app-<version>.tar.gz` per USB-Stick auf air-gapped Server kopiert, `./install.sh` laeuft ohne Internet-Zugriff durch, systemd-Service startet, autostart on boot.
+2. UI auf `http://<server>:<port>/` zeigt Gruppen-Dashboard. Browser laedt UI komplett ohne externe Requests (DevTools-Check: 0 Calls zu Cloud-Hosts).
 3. Neuer Host wird in der UI angelegt → erscheint **sofort** in allen offenen Browser-Tabs (Live-Sync).
-4. 50 Hosts gleichzeitig: CPU < 5 %, RAM < 300 MB, UI-Update < 200 ms.
+4. **254 Hosts gleichzeitig:** CPU < 15 %, RAM < 400 MB, UI-Update < 200 ms.
 5. Ein Host wird unerreichbar → Status-Tag wechselt < 3 s auf OFFLINE, RTT-Chart zeigt Lueckenstrich, Outage in Event-Log.
 6. Server-Restart: nach < 30 s sind alle Hosts wieder live, History intakt.
 7. History-Endpoint liefert SQLite-Daten der letzten 7 Tage fuer einen Host.
 8. Browser-Reload: Sprache (EN/IT) und Theme (light/dark) persistieren.
 9. `pytest` Smoke + Parser-Tests + API-Tests gruen.
-10. README beschreibt Setup auf Zielserver in < 10 Minuten.
+10. README beschreibt Offline-Install in < 10 Minuten (Bundle bauen + transferieren + entpacken + starten).
+11. `LICENSE` (MIT) im Repo-Root, vendored Libraries behalten ihre Original-Lizenz-Header.
 
 ---
 
@@ -168,8 +177,10 @@ Implementierung: CSS-Custom-Properties pro Token, Theme-Switch via `data-theme="
 
 | Risiko | Impact | Mitigation |
 |--------|--------|------------|
-| 50 parallele Subprocess-Pings ueberlasten OS | Tool wirkt unreliable | Concurrency-Limit (Semaphore), batched scheduling, Tests mit 50-Host-Mock |
-| SQLite Write-Contention bei 50 Hz Inserts | Latency-Spikes, Lock-Errors | Async-Queue + Batch-Insert (z.B. 1× pro 500ms), WAL-Mode |
+| 254 parallele Subprocess-Pings ueberlasten OS | Tool wirkt unreliable | Concurrency-Limit (Semaphore=64), jittered Scheduler, Tests mit 254-Host-Mock |
+| SQLite Write-Contention bei 254 Hz Inserts | Latency-Spikes, Lock-Errors | Async-Queue + Batch-Insert (z.B. 1× pro 500ms), WAL-Mode, Index (host_id, ts) |
+| Offline-Bundle veraltete Wheels oder fehlende Plattform-Wheels (manylinux vs musllinux) | Install scheitert auf Zielserver | Bundle-Build mit exakt der Ziel-Python/glibc-Version (`pip download --platform manylinux2014_x86_64 --python-version 3.11`); Bundle-Smoke-Test in Linux-VM vor Auslieferung |
+| Vendored Chart.js wird nicht aktualisiert → Security-Drift | Bekannte Lib-Bugs bleiben | Build-Skript pinnt Chart.js-Version, Doku weist auf manuelle Update-Pflicht hin |
 | ICMP-Permissions auf Linux (`ping` needs CAP_NET_RAW oder setuid) | Tool faellt aus | systemd-Unit setzt `AmbientCapabilities=CAP_NET_RAW` |
 | WebSocket-Reconnect-Storm bei Server-Restart | Server overload | Exponential Backoff client-side, jittered |
 | UI mit 50 Hosts wird unuebersichtlich | UX leidet | Gruppen-Dashboard mit Drill-Down (UC-1+2), max ~12 Hosts pro Gruppe-Empfehlung |

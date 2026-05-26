@@ -1,7 +1,7 @@
 # Klaerungsfragen an Francesco
 
-> Bezug: `prd.md` v0.2
-> Status: **alle Blocker beantwortet (2026-05-25, Christoph)**, Rueckspiegelung an Francesco offen.
+> Bezug: `prd.md` v0.3
+> Status: **alle Blocker + Air-Gap-/Scale-Folgefragen beantwortet (2026-05-25, Christoph)**, Rueckspiegelung an Francesco offen.
 > Antworten in Klammern.
 
 ---
@@ -17,8 +17,8 @@ Strings ausgelagert in `static/i18n/{en,it}.json`. Switch im UI. Persistenz via 
 ### Q3 — Sicherheits-Modell → **Strikt LAN-only**
 Bind `0.0.0.0`, CORS auf LAN-CIDR (Env-konfigurierbar), Host-Input validiert. Keine Auth.
 
-### Q4 — Single vs Multi-Host → **Bis zu 50 Hosts parallel, Server-Deploy, LAN-weit HTTP-Zugriff**
-*Game-Changer.* Architektur signifikant groesser: Server-Process, SQLite, Gruppen-Dashboard, WebSocket-Hub mit Multiplexing.
+### Q4 — Single vs Multi-Host → **Gesamtes privates /24-Subnetz (bis zu 254 Hosts) parallel, Server-Deploy, LAN-weit HTTP-Zugriff**
+*Game-Changer.* Architektur signifikant groesser: Server-Process, SQLite, Gruppen-Dashboard, WebSocket-Hub mit Multiplexing. Concurrency-Limit (Semaphore=64) statt 254 gleichzeitiger Subprocesses.
 
 ### Q5 — Refactor von Francescos Prototyp → **Ja, Tests + Refactor zuerst**
 Sprint 1 = Charakterisierungs-Tests fuer Parser → Backend-Split → Frontend-Split.
@@ -65,6 +65,25 @@ Stack-Wahl bleibt wie Francesco. Docker-Sorge wird durch systemd-Default adressi
 
 ---
 
+## Air-Gap- und Scale-Folgefragen — BEANTWORTET
+
+### Q-LAN — Statische Liste oder Auto-Discovery → **Statische Liste (Operator pflegt ueber UI)**
+Keine ARP/ICMP-Sweeps, keine Auto-Discovery. UI-CRUD ist Single Source of Truth fuer Host-Liste.
+
+### Q-Subnet — Subnet-Groesse → **/24 (max ~254 Hosts)**
+Architektur scaled fuer 254 Hosts × 1 Hz. Concurrency-Limit Default 64.
+
+### Q-Offline — Software-Distribution → **USB-Stick / SCP (Offline-Bundle)**
+- Bundle: `ping-app-<version>.tar.gz` mit Python-Wheels + vendored Assets + systemd-Unit + `install.sh`.
+- Bauen auf Internet-faehigem Geraet via `pip download --platform manylinux2014_x86_64 --python-version 3.11`.
+- Transfer per USB-Stick oder SCP von einem Internet-Geraet im selben LAN.
+- Install: `tar -xzf ...`, `./install.sh` → venv + systemd-Unit + Start.
+
+### Q12 — Lizenz → **MIT**
+`LICENSE` im Repo-Root, vendored Libraries behalten ihre Original-Lizenz-Header (Chart.js MIT, Inter SIL Open Font License).
+
+---
+
 ## Nice-to-have — VERSCHOBEN nach v1
 
 ### Q8 — Export (CSV/PNG)
@@ -79,8 +98,7 @@ Vorschlag in Plan v0.2: `src/`-Layout (Python), `static/` (UI), `tests/` (pytest
 ### Q11 — CI (GitHub Actions)
 Nicht v1. Lokal `pytest` + `ruff` + `black` reichen vorerst. CI ergaenzbar.
 
-### Q12 — Lizenz
-Offen. Default-Vorschlag: MIT (sofern Francesco kein proprietaeres Modell will). Klaeren vor erstem oeffentlichen Release.
+### Q12 — Lizenz → **MIT (bestaetigt 2026-05-25)** — verschoben in Air-Gap-Sektion oben.
 
 ---
 
