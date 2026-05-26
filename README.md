@@ -1,0 +1,62 @@
+# NetPing Dashboard
+
+Server-resident LAN ping dashboard. Monitors up to ~254 hosts (one /24 subnet)
+in real time, runs **air-gapped** on a Linux server, accessed via HTTP from
+anywhere in the LAN.
+
+> **Status:** Sprint 1 (Baseline + Tests). Not yet runnable as a server.
+> See `00_infos/prd-plan.md` for the full roadmap.
+
+## Documentation
+
+- [`00_infos/prd.md`](00_infos/prd.md) — Product Requirements (v0.3)
+- [`00_infos/prd-questions.md`](00_infos/prd-questions.md) — Clarifying Qs
+  (all blockers answered)
+- [`00_infos/prd-plan.md`](00_infos/prd-plan.md) — Implementation plan
+  (5 sprints, 22-30 PT)
+- [`00_infos/prd-plan-audit.md`](00_infos/prd-plan-audit.md) — Plan audit
+  (Opus max)
+- [`00_infos/untitled.pen`](00_infos/untitled.pen) — Design system
+  (Pencil file, Editorial Brutalist)
+- [`00_infos/repo-contract.yaml`](00_infos/repo-contract.yaml) — Machine-
+  readable repo metadata
+
+## Development
+
+```bash
+make venv          # create .venv
+make install-dev   # install dev deps from requirements-dev.txt
+make test          # run pytest
+make lint          # run ruff lint
+make format        # auto-format
+make check         # lint + test
+```
+
+### Layout
+
+```
+src/netping/          # Python package
+  parser.py           # ping output parser (Sprint 1: golden-tested baseline)
+  …                   # app.py, pinger.py, store.py, ws.py — Sprint 2+
+tests/                # pytest
+  fixtures/           # captured ping outputs (real + hand-crafted)
+deploy/               # systemd unit, env.example — Sprint 4
+tools/                # build_bundle.sh — Sprint 4
+static/               # SPA (HTML/CSS/JS) — Sprint 3
+  vendor/             # vendored Chart.js + Inter font (air-gap requirement)
+00_infos/             # documentation
+```
+
+### Lockfiles
+
+Runtime deps in `requirements.in` → compiled to `requirements.txt` via
+`pip-tools`. Same for `requirements-dev.in/.txt`. Update:
+
+```bash
+make lock
+```
+
+## License
+
+[MIT](LICENSE). Vendored libraries (Chart.js, Inter) keep their original
+licenses (MIT and SIL Open Font License respectively).

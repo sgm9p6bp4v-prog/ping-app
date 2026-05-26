@@ -1,0 +1,10 @@
+# Development dependencies.
+# Compile via: pip-compile --output-file=requirements-dev.txt requirements-dev.in
+
+-r requirements.in
+
+pytest>=8.0
+ruff>=0.5
+black>=24.0
+pip-tools>=7.4
+pre-commit>=3.7
