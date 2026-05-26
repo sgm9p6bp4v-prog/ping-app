@@ -13,15 +13,37 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from .api import router as api_router
 from .config import get_settings
 from .pinger import PingScheduler
 from .store import Store
 from .ws import WebSocketHub
+
+# Cheap CSRF defence: every browser fetch() sets X-Requested-With
+# (the front-end api.js does — see static/js/api.js). A <form> POST from a
+# malicious LAN page cannot set custom headers cross-origin, so requiring this
+# header on writes blocks the simplest CSRF vector without needing auth.
+# Final audit C1.
+WRITE_METHODS = {"POST", "PATCH", "PUT", "DELETE"}
+
+
+class CSRFGuardMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        if (
+            request.method in WRITE_METHODS
+            and request.url.path.startswith("/api/")
+            and request.headers.get("x-requested-with") != "fetch"
+        ):
+            return JSONResponse(
+                status_code=403, content={"detail": "missing X-Requested-With: fetch"}
+            )
+        return await call_next(request)
 
 log = logging.getLogger("netping")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s — %(message)s")
@@ -48,6 +70,9 @@ async def lifespan(app: FastAPI):
     app.state.store = store
     app.state.hub = hub
     app.state.scheduler = scheduler
+    # Reconcile lock is created here (not lazily in the API handler) so two
+    # concurrent first-requests cannot race-create two separate locks.
+    app.state.reconcile_lock = asyncio.Lock()
     # background retention purge
     purge_task = asyncio.create_task(
         _purge_loop(store, settings.sample_retention_days, settings.event_retention_days),
@@ -75,12 +100,13 @@ async def _purge_loop(store: Store, sample_days: int, event_days: int) -> None:
 def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(title="NetPing Dashboard", version="0.0.1", lifespan=lifespan)
+    app.add_middleware(CSRFGuardMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
         allow_credentials=True,
         allow_methods=["*"],
-        allow_headers=["*"],
+        allow_headers=["X-Requested-With", "Content-Type"],
     )
     app.include_router(api_router)
 

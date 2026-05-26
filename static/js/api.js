@@ -1,6 +1,8 @@
-/** Thin fetch wrapper. */
+/** Thin fetch wrapper. Always sends X-Requested-With for the CSRF guard
+ * (server-side CSRFGuardMiddleware rejects mutating /api/* requests without
+ * it; a cross-origin <form> POST can't set custom headers). */
 async function json(method, url, body) {
-  const opts = { method, headers: {} };
+  const opts = { method, headers: { "X-Requested-With": "fetch" } };
   if (body !== undefined) {
     opts.headers["Content-Type"] = "application/json";
     opts.body = JSON.stringify(body);

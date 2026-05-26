@@ -82,8 +82,9 @@ if [[ ! -d $VENV ]]; then
   echo "[install] created venv  $VENV"
 fi
 
-# pip itself often needs upgrading — use --no-index against bundled wheels.
-"$VENV/bin/pip" install --no-index --find-links "$BUNDLE_DIR/wheels" --upgrade pip || true
+# Use the venv's bundled pip directly; do NOT --upgrade pip from the offline
+# wheels (pip itself is not in the bundle and the earlier `|| true` would mask
+# a real failure — Final audit B1).
 "$VENV/bin/pip" install --no-index --find-links "$BUNDLE_DIR/wheels" --upgrade \
   -r "$APP_DIR/requirements.txt"
 

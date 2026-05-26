@@ -189,15 +189,14 @@ async def _reconcile(request: Request) -> None:
     """Synchronous in-handler reconcile.
 
     Synchronous because parallel reconciles caused state races (Grumpy audit
-    Sprint 2). The scheduler itself is held under the app's request-handling
-    event loop; a global lock keeps repeated rapid CRUD operations from
-    interleaving snapshots.
+    Sprint 2). The lock is created in :func:`netping.app.lifespan` to avoid
+    a race when two concurrent first-requests would each lazy-init their own
+    lock (Final audit A1).
     """
     scheduler = getattr(request.app.state, "scheduler", None)
     if scheduler is None:
         return
-    lock: asyncio.Lock = getattr(request.app.state, "reconcile_lock", None) or asyncio.Lock()
-    request.app.state.reconcile_lock = lock
+    lock: asyncio.Lock = request.app.state.reconcile_lock
     async with lock:
         hosts = await _store(request).list_hosts()
         scheduler.reconcile(hosts)

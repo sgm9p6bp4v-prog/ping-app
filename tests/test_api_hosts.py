@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from netping.api import router
+from netping.app import CSRFGuardMiddleware
 from netping.store import Store
 from netping.ws import WebSocketHub
 
@@ -17,11 +18,13 @@ from netping.ws import WebSocketHub
 @pytest.fixture
 async def app(tmp_path: Path) -> AsyncIterator[FastAPI]:
     a = FastAPI()
+    a.add_middleware(CSRFGuardMiddleware)
     store = Store(tmp_path / "ping.db", flush_interval_s=0.05)
     await store.open()
     store.start_writer()
     a.state.store = store
     a.state.hub = WebSocketHub()
+    a.state.reconcile_lock = __import__("asyncio").Lock()
     a.include_router(router)
     yield a
     await store.close()
@@ -30,7 +33,13 @@ async def app(tmp_path: Path) -> AsyncIterator[FastAPI]:
 @pytest.fixture
 async def client(app: FastAPI) -> AsyncIterator[AsyncClient]:
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as c:
+    # Browser fetch() always sets X-Requested-With via static/js/api.js; the
+    # tests model the same browser, so attach the header globally.
+    async with AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        headers={"X-Requested-With": "fetch"},
+    ) as c:
         yield c
 
 
@@ -141,3 +150,20 @@ async def test_api_info_returns_hostname_and_lan_ip(client: AsyncClient) -> None
     body = r.json()
     for field in ("version", "ts", "hostname", "lan_ip", "os", "ws_clients"):
         assert field in body
+
+
+async def test_csrf_guard_blocks_write_without_header(app: FastAPI) -> None:
+    """Final audit C1: <form> POST from a malicious LAN page lacks
+    X-Requested-With and must be rejected."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as bare:
+        r = await bare.post("/api/hosts", json={"name": "x", "address": "1.1.1.1"})
+    assert r.status_code == 403
+
+
+async def test_csrf_guard_allows_read_without_header(app: FastAPI) -> None:
+    """GET requests are not state-mutating and must remain reachable."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as bare:
+        r = await bare.get("/api/hosts")
+    assert r.status_code == 200
