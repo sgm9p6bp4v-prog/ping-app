@@ -28,5 +28,6 @@ Geprueft von: Christoph (Dev-Run auf macOS), Linux-Run pending VM (HOLD-VM).
 ## Naechste Schritte
 
 1. **HOLD-VM aufloesen:** Ubuntu/Debian-VM bauen, Bundle deployen, AK #1/#4/#6 final pruefen.
-2. **Francesco-Rueckspiegelung:** nur noch Scope (254 Kapazitaet, real ~50). Design ist `.pen`-Vorgabe (nicht verhandelbar), Lizenz MIT bestaetigt.
-3. ~~PR oeffnen~~ — **PR #1 gemerged 2026-05-26.**
+2. ~~PR oeffnen~~ — **PR #1 gemerged 2026-05-26.**
+
+Alle Phase-0-Entscheidungen sind durch Christoph getroffen — keine Rueckspiegelungs-Items offen.
