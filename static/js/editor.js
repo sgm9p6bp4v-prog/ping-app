@@ -8,12 +8,14 @@ import { t } from "./i18n.js";
 let backdrop = null;
 let modal = null;
 let editing = null;
+let previouslyFocused = null;
 
 export function openAdd() { open(null); }
 export function openEdit(hostId) { open(Store.hosts.get(hostId) ?? null); }
 
 function open(host) {
   editing = host;
+  previouslyFocused = document.activeElement;
   ensureMounted();
   modal.querySelector("h2").textContent = host ? t("editor.edit_title") : t("editor.add_title");
   modal.querySelector("#editor-name").value = host?.name ?? "";
@@ -32,6 +34,14 @@ function close() {
   if (modal) modal.style.display = "none";
   if (backdrop) backdrop.style.display = "none";
   editing = null;
+  if (previouslyFocused?.focus) previouslyFocused.focus();
+  previouslyFocused = null;
+}
+
+function focusableInModal() {
+  return [...modal.querySelectorAll(
+    'input,button,select,textarea,[tabindex]:not([tabindex="-1"])'
+  )].filter((el) => !el.disabled && el.offsetParent !== null);
 }
 
 function ensureMounted() {
@@ -43,8 +53,11 @@ function ensureMounted() {
 
   modal = document.createElement("form");
   modal.className = "modal";
+  modal.setAttribute("role", "dialog");
+  modal.setAttribute("aria-modal", "true");
+  modal.setAttribute("aria-labelledby", "editor-title");
   modal.innerHTML = `
-    <h2>—</h2>
+    <h2 id="editor-title">—</h2>
     <div class="modal__field"><label data-i18n="editor.field.name">Name</label><input id="editor-name" required maxlength="120" /></div>
     <div class="modal__field"><label data-i18n="editor.field.address">IP or hostname</label><input id="editor-address" required maxlength="253" /></div>
     <div class="modal__field"><label data-i18n="editor.field.group">Group</label><input id="editor-group" value="default" maxlength="80" /></div>
@@ -63,7 +76,26 @@ function ensureMounted() {
   modal.addEventListener("submit", onSubmit);
   modal.querySelector("#editor-delete").addEventListener("click", onDelete);
   document.addEventListener("keydown", (ev) => {
-    if (modal.style.display === "grid" && ev.key === "Escape") close();
+    if (modal.style.display !== "grid") return;
+    if (ev.key === "Escape") {
+      ev.preventDefault();
+      close();
+      return;
+    }
+    if (ev.key === "Tab") {
+      // Focus-trap: keep tabbing inside the modal.
+      const items = focusableInModal();
+      if (items.length === 0) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (ev.shiftKey && document.activeElement === first) {
+        ev.preventDefault();
+        last.focus();
+      } else if (!ev.shiftKey && document.activeElement === last) {
+        ev.preventDefault();
+        first.focus();
+      }
+    }
   });
 }
 

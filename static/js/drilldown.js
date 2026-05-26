@@ -19,7 +19,13 @@ export function open(hostId) {
   panel.style.display = "grid";
   fill(host);
   unsubscribe = Store.subscribe(() => {
-    if (currentHostId === hostId) refreshChart();
+    if (currentHostId !== hostId) return;
+    // Host disappeared mid-drill → close the panel instead of leaving a stale title.
+    if (!Store.hosts.has(currentHostId)) {
+      close();
+      return;
+    }
+    refreshChart();
   });
   document.body.style.overflow = "hidden";
 }

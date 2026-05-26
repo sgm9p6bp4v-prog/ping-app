@@ -67,11 +67,18 @@ function renderGroups() {
   groupsEl.innerHTML = html.join("");
   groupsEl.querySelectorAll("[data-host-id]").forEach((el) => {
     const id = Number(el.dataset.hostId);
-    el.addEventListener("click", (ev) => {
+    const openDetail = (ev) => {
       if (ev.shiftKey || ev.metaKey || ev.ctrlKey) {
         if (onHostEditHandler) onHostEditHandler(id);
       } else if (onHostClickHandler) {
         onHostClickHandler(id);
+      }
+    };
+    el.addEventListener("click", openDetail);
+    el.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter" || ev.key === " ") {
+        ev.preventDefault();
+        openDetail(ev);
       }
     });
   });
@@ -82,8 +89,12 @@ function hostCardHtml(host) {
   const status = entry?.status ?? "idle";
   const stats = entry?.stats;
   const last = stats?.last;
+  const label = `${host.name} (${host.address}) — ${t(`host.status.${status}`)}`;
   return `
-    <article class="host-card" data-status="${status}" data-host-id="${host.id}" title="Click: details · Shift+Click: edit">
+    <article class="host-card" data-status="${status}" data-host-id="${host.id}"
+             role="button" tabindex="0"
+             aria-label="${escapeAttr(label)}"
+             title="Click: details · Shift+Click: edit">
       <div class="host-card__name">${escapeHtml(host.name)}</div>
       <div class="host-card__addr">${escapeHtml(host.address)}</div>
       <div class="host-card__rtt">${rttHtml(last, status)}</div>

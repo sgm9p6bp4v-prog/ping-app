@@ -76,6 +76,8 @@ function onWsMessage(msg) {
     case "host_deleted":
       Store.deleteHost(msg.host_id);
       break;
+    default:
+      console.warn("ws: unknown message type", msg.type, msg);
   }
 }
 
@@ -93,7 +95,17 @@ document.getElementById("fab-add").addEventListener("click", openAdd);
 
 // ---- subscribe dashboard re-render -----------------------------------------
 
-Store.subscribe(() => renderDashboard());
+// Coalesce renders to one per animation frame; at 254 hosts x 1 Hz the naive
+// per-sample render burned through ~250 full innerHTML rebuilds per second.
+let renderPending = false;
+Store.subscribe(() => {
+  if (renderPending) return;
+  renderPending = true;
+  requestAnimationFrame(() => {
+    renderPending = false;
+    renderDashboard();
+  });
+});
 
 // ---- bootstrap --------------------------------------------------------------
 
