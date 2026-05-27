@@ -9,9 +9,8 @@ import { Store } from "./store.js";
 import { connect as connectWS } from "./ws.js";
 import { api } from "./api.js";
 import {
-  render as renderDashboard, renderLive, onHostClick, onHostEdit, onGroupSettings, setViewMode,
-} from "./dashboard.js?v=momentum-drill-6";
-import { open as openDrill } from "./drilldown.js?v=momentum-drill-2";
+  render as renderDashboard, renderLive, onHostEdit, onGroupSettings, setViewMode,
+} from "./dashboard.js?v=host-drill-fix-11";
 import { openAdd, openEdit } from "./editor.js";
 import * as monitoring from "./monitoring.js?v=readymag-pitch-pages-5";
 import { open as openGroupSettings } from "./group-settings.js";
@@ -121,32 +120,9 @@ function onWsState(state) {
 
 // ---- click handlers ---------------------------------------------------------
 
-onHostClick((id) => openDrill(id));
 onHostEdit((id) => openEdit(id));
 onGroupSettings((name) => openGroupSettings(name));
-globalThis.pingmeOpenHost = (id, ev) => {
-  if (ev?.shiftKey || ev?.metaKey || ev?.ctrlKey) openEdit(Number(id));
-  else openDrill(Number(id));
-};
 document.getElementById("fab-add").addEventListener("click", openAdd);
-document.getElementById("groups").addEventListener("click", (ev) => {
-  const card = ev.target.closest("[data-host-id]");
-  if (!card) return;
-  const id = Number(card.dataset.hostId);
-  if (ev.shiftKey || ev.metaKey || ev.ctrlKey) openEdit(id);
-  else openDrill(id);
-});
-document.getElementById("groups").addEventListener("keydown", (ev) => {
-  if (ev.key !== "Enter" && ev.key !== " ") return;
-  const card = ev.target.closest("[data-host-id]");
-  if (!card) return;
-  ev.preventDefault();
-  openDrill(Number(card.dataset.hostId));
-});
-window.addEventListener("hashchange", () => {
-  const match = /^#host-(\d+)$/.exec(location.hash);
-  if (match) openDrill(Number(match[1]));
-});
 
 // ---- View toggle ------------------------------------------------------------
 

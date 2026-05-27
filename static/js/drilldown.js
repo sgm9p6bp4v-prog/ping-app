@@ -9,16 +9,20 @@ let currentHostId = null;
 let unsubscribe = null;
 
 export function open(hostId) {
-  const host = Store.hosts.get(hostId);
+  const host = findHost(hostId);
   if (!host) return;
-  currentHostId = hostId;
+  if (unsubscribe) {
+    unsubscribe();
+    unsubscribe = null;
+  }
+  currentHostId = host.id;
   if (!panel) panel = buildPanel();
   panel.style.display = "grid";
   fill(host);
   unsubscribe = Store.subscribe(() => {
-    if (currentHostId !== hostId) return;
+    if (currentHostId !== host.id) return;
     // Host disappeared mid-drill → close the panel instead of leaving a stale title.
-    if (!Store.hosts.has(currentHostId)) {
+    if (!findHost(currentHostId)) {
       close();
       return;
     }
@@ -80,7 +84,7 @@ function fill(host) {
 }
 
 function refreshChart() {
-  const entry = Store.samples.get(currentHostId);
+  const entry = Store.samples.get(currentHostId) ?? Store.samples.get(Number(currentHostId)) ?? Store.samples.get(String(currentHostId));
   const samples = (entry?.samples ?? []).slice(-60);
   const values = samples.map((s) => (s.success && s.rtt_ms != null ? s.rtt_ms : null));
   const max = Math.max(1, ...values.filter((v) => v != null));
@@ -94,8 +98,14 @@ function refreshChart() {
     return `<span class="drill__bar" style="--bar-height:${height}%" title="${escapeAttr(label)}"></span>`;
   }).join("");
 }
+
+function findHost(hostId) {
+  return Store.hosts.get(hostId) ?? Store.hosts.get(Number(hostId)) ?? Store.hosts.get(String(hostId));
+}
+
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
   }[c]));
 }
+function escapeAttr(s) { return escapeHtml(s); }

@@ -4,7 +4,7 @@
 import { Store, SLOW_THRESHOLD_MS } from "./store.js";
 import { t } from "./i18n.js";
 import { api } from "./api.js";
-import { open as openDrill } from "./drilldown.js?v=momentum-drill-6";
+import { open as openDrill } from "./drilldown.js?v=host-drill-fix-9";
 
 const groupsEl = document.getElementById("groups");
 const heroHostTargetEl = document.getElementById("hero-host-target");
@@ -31,6 +31,25 @@ let onGroupSettingsHandler = null;
 export function onGroupSettings(handler) {
   onGroupSettingsHandler = handler;
 }
+
+document.addEventListener("click", (ev) => {
+  const card = ev.target.closest?.("[data-host-id]");
+  if (!card || !groupsEl.contains(card)) return;
+  openHostCard(card, ev);
+}, true);
+
+document.addEventListener("keydown", (ev) => {
+  if (ev.key !== "Enter" && ev.key !== " ") return;
+  const card = ev.target.closest?.("[data-host-id]");
+  if (!card || !groupsEl.contains(card)) return;
+  ev.preventDefault();
+  openHostCard(card, ev);
+}, true);
+
+window.addEventListener("hashchange", () => {
+  const match = /^#host-(\d+)$/.exec(location.hash);
+  if (match) openDrill(Number(match[1]));
+});
 
 let viewMode = "groups";  // 'groups' | 'ip'
 export function setViewMode(mode) {
@@ -225,24 +244,21 @@ function renderGroups() {
 
 function attachHostCardHandlers() {
   groupsEl.querySelectorAll("[data-host-id]").forEach((el) => {
-    const id = Number(el.dataset.hostId);
-    const openDetail = (ev) => {
-      if (ev.shiftKey || ev.metaKey || ev.ctrlKey) {
-        if (onHostEditHandler) onHostEditHandler(id);
-      } else if (onHostClickHandler) {
-        onHostClickHandler(id);
-      } else {
-        openDrill(id);
-      }
-    };
-    el.addEventListener("click", openDetail);
-    el.addEventListener("keydown", (ev) => {
-      if (ev.key === "Enter" || ev.key === " ") {
-        ev.preventDefault();
-        openDetail(ev);
-      }
-    });
+    el.setAttribute("role", "button");
   });
+}
+
+function openHostCard(card, ev) {
+  const id = Number(card.dataset.hostId);
+  if (!Number.isFinite(id)) return;
+  if (ev.shiftKey || ev.metaKey || ev.ctrlKey) {
+    ev.preventDefault();
+    if (onHostEditHandler) onHostEditHandler(id);
+  } else if (onHostClickHandler) {
+    onHostClickHandler(id);
+  } else {
+    openDrill(id);
+  }
 }
 
 function hostCardHtml(host) {
@@ -252,16 +268,15 @@ function hostCardHtml(host) {
   const last = stats?.last;
   const label = `${host.name} (${host.address}) — ${t(`host.status.${status}`)}`;
   return `
-    <article class="host-card" data-status="${status}" data-host-id="${host.id}"
-             role="button" tabindex="0"
-             onclick="import('/js/drilldown.js?v=momentum-drill-6').then((m) => m.open(${host.id}))"
+    <a class="host-card" data-status="${status}" data-host-id="${host.id}"
+             href="#host-${host.id}" role="button"
              aria-label="${escapeAttr(label)}"
              title="Click: details · Shift+Click: edit">
       <div class="host-card__name">${escapeHtml(host.name)}</div>
       <div class="host-card__addr">${escapeHtml(host.address)}</div>
       <div class="host-card__rtt">${rttHtml(last, status)}</div>
       <div class="host-card__status">${t(`host.status.${status}`)}</div>
-    </article>
+    </a>
   `;
 }
 
