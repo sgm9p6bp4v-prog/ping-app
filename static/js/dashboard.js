@@ -1,16 +1,12 @@
 /**
- * Render group dashboard + KPI hero from Store state.
+ * Render group dashboard + conversational hero from Store state.
  */
 import { Store, SLOW_THRESHOLD_MS } from "./store.js";
 import { t } from "./i18n.js";
 import { api } from "./api.js";
 
 const groupsEl = document.getElementById("groups");
-const heroOnlineEl = document.getElementById("hero-online");
-const kpiHostsEl = document.getElementById("kpi-hosts");
-const kpiOnlineEl = document.getElementById("kpi-online");
-const kpiOfflineEl = document.getElementById("kpi-offline");
-const kpiLossEl = document.getElementById("kpi-loss");
+const heroHostTargetEl = document.getElementById("hero-host-target");
 const overallEl = document.getElementById("overall-status");
 
 let onHostClickHandler = null;
@@ -37,6 +33,11 @@ export function render() {
   renderKpis();
   if (viewMode === "ip") renderIpList();
   else renderGroups();
+}
+
+export function renderLive() {
+  renderKpis();
+  updateHostCards();
 }
 
 function renderIpList() {
@@ -76,17 +77,46 @@ function parseIp(addr) {
 
 function renderKpis() {
   const c = Store.overallCounts();
-  heroOnlineEl.innerHTML = `${c.online}<small>/${c.total}</small>`;
-  kpiHostsEl.textContent = c.total;
-  kpiOnlineEl.textContent = c.online;
-  kpiOfflineEl.textContent = c.offline;
-  kpiLossEl.textContent = `${c.loss.toFixed(1)}%`;
+  const firstHost = [...Store.hosts.values()][0];
+  heroHostTargetEl.textContent = firstHost?.address ?? "no host yet";
 
   let status = "online";
   if (c.offline > 0 && c.offline === c.total) status = "offline";
   else if (c.offline > 0) status = "degraded";
   overallEl.dataset.status = status;
   overallEl.textContent = t(`header.${status}`);
+}
+
+function updateHostCards() {
+  groupsEl.querySelectorAll("[data-host-id]").forEach((card) => {
+    const host = Store.hosts.get(Number(card.dataset.hostId));
+    if (!host) return;
+    const entry = Store.samples.get(host.id);
+    const status = entry?.status ?? "idle";
+    const stats = entry?.stats;
+    card.dataset.status = status;
+    card.setAttribute(
+      "aria-label",
+      `${host.name} (${host.address}) — ${t(`host.status.${status}`)}`
+    );
+    const rtt = card.querySelector(".host-card__rtt");
+    const statusEl = card.querySelector(".host-card__status");
+    if (rtt) rtt.innerHTML = rttHtml(stats?.last, status);
+    if (statusEl) statusEl.textContent = t(`host.status.${status}`);
+  });
+
+  groupsEl.querySelectorAll(".group[data-group]").forEach((section) => {
+    const groupName = section.dataset.group;
+    if (groupName === "__ip_view__") return;
+    const hosts = Store.groupedHosts().find(([name]) => name === groupName)?.[1] ?? [];
+    const gstate = Store.groupState(groupName);
+    const online = hosts.filter((h) => statusOf(h.id) === "online" || statusOf(h.id) === "slow").length;
+    const offline = hosts.filter((h) => statusOf(h.id) === "offline").length;
+    const meta = section.querySelector(".group__meta");
+    if (meta) {
+      meta.textContent = `${hosts.length} · ${gstate.enabled ? `${online} ON · ${offline} OFF` : t("group.disabled")}`;
+    }
+  });
 }
 
 function renderGroups() {

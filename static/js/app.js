@@ -1,5 +1,5 @@
 /**
- * NetPing — front-end entry point.
+ * ping.me — front-end entry point.
  *
  * Wires together: i18n + theme + footer + WS + REST API + reactive store +
  * dashboard renderer + drill-down + editor.
@@ -9,13 +9,15 @@ import { Store } from "./store.js";
 import { connect as connectWS } from "./ws.js";
 import { api } from "./api.js";
 import {
-  render as renderDashboard, onHostClick, onHostEdit, onGroupSettings, setViewMode,
+  render as renderDashboard, renderLive, onHostClick, onHostEdit, onGroupSettings, setViewMode,
 } from "./dashboard.js";
 import { open as openDrill } from "./drilldown.js";
 import { openAdd, openEdit } from "./editor.js";
 import * as monitoring from "./monitoring.js";
 import { open as openGroupSettings } from "./group-settings.js";
 import { refresh as refreshSuggestions } from "./suggestions.js";
+import { initMotion, enhanceMotion } from "./motion.js";
+import { initPingSettings } from "./ping-settings.js";
 
 // ---- theme ------------------------------------------------------------------
 
@@ -32,6 +34,7 @@ setTheme(localStorage.getItem("netping.theme") ?? "light");
 // ---- clock ------------------------------------------------------------------
 
 function tickClock() {
+  if (!document.getElementById("clock")) return;
   const d = new Date();
   document.getElementById("clock").textContent =
     d.toISOString().slice(0, 19).replace("T", " ") + " UTC";
@@ -46,7 +49,8 @@ async function refreshServerInfo() {
     const i = await api.info();
     document.getElementById("footer-host").textContent = `${i.hostname} (${i.lan_ip})`;
     document.getElementById("footer-version").textContent = i.version;
-    document.getElementById("server-info").textContent = `${i.hostname} · ${i.lan_ip}`;
+    const serverInfo = document.getElementById("server-info");
+    if (serverInfo) serverInfo.textContent = `${i.hostname} · ${i.lan_ip}`;
     Store.serverInfo = i;
   } catch (e) {
     document.getElementById("footer-host").textContent = "—";
@@ -128,6 +132,7 @@ function setView(mode) {
   document.getElementById("view-ip").setAttribute("aria-pressed", mode === "ip");
   localStorage.setItem("netping.view", mode);
   renderDashboard();
+  enhanceMotion();
 }
 document.getElementById("view-groups").addEventListener("click", () => setView("groups"));
 document.getElementById("view-ip").addEventListener("click", () => setView("ip"));
@@ -137,12 +142,20 @@ document.getElementById("view-ip").addEventListener("click", () => setView("ip")
 // Coalesce renders to one per animation frame; at 254 hosts x 1 Hz the naive
 // per-sample render burned through ~250 full innerHTML rebuilds per second.
 let renderPending = false;
-Store.subscribe(() => {
+let pendingReason = "sample";
+Store.subscribe((reason = "sample") => {
+  if (reason === "structure") pendingReason = "structure";
   if (renderPending) return;
   renderPending = true;
   requestAnimationFrame(() => {
     renderPending = false;
-    renderDashboard();
+    if (pendingReason === "structure") {
+      renderDashboard();
+      enhanceMotion();
+    } else {
+      renderLive();
+    }
+    pendingReason = "sample";
   });
 });
 
@@ -155,6 +168,7 @@ Store.subscribe(() => {
     // re-render with new strings
     onWsState(document.getElementById("ws-state").dataset.state ?? "disconnected");
     renderDashboard();
+    enhanceMotion();
   });
   document.getElementById(`lang-${lang}`)?.setAttribute("aria-pressed", "true");
   document.querySelectorAll("[id^=lang-]").forEach((b) =>
@@ -167,6 +181,8 @@ Store.subscribe(() => {
   await monitoring.init();
   await refreshSuggestions();
   setView(localStorage.getItem("netping.view") === "ip" ? "ip" : "groups");
+  initPingSettings();
+  initMotion();
 
   const wsProto = location.protocol === "https:" ? "wss" : "ws";
   connectWS({

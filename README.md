@@ -1,4 +1,4 @@
-# NetPing Dashboard
+# ping.me Dashboard
 
 Server-resident LAN ping dashboard. Monitors up to ~254 hosts (a /24 subnet)
 in real time. Runs **air-gapped** on a Linux server, accessed via HTTP from

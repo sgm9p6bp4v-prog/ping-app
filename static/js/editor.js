@@ -4,6 +4,7 @@
 import { api } from "./api.js";
 import { Store } from "./store.js";
 import { t } from "./i18n.js";
+import { getPingDefaults } from "./ping-settings.js";
 
 let backdrop = null;
 let modal = null;
@@ -21,7 +22,7 @@ function open(host) {
   modal.querySelector("#editor-name").value = host?.name ?? "";
   modal.querySelector("#editor-address").value = host?.address ?? "";
   modal.querySelector("#editor-group").value = host?.group_name ?? "default";
-  modal.querySelector("#editor-interval").value = host?.interval_s ?? 1.0;
+  modal.querySelector("#editor-interval").value = host?.interval_s ?? getPingDefaults().interval;
   modal.querySelector("#editor-enabled").checked = host?.enabled ?? true;
   modal.querySelector("#editor-delete").style.display = host ? "" : "none";
   modal.querySelector("#editor-error").textContent = "";

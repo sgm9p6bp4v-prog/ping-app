@@ -3,41 +3,50 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>NetPing</title>
+  <title>ping.me</title>
   <link rel="stylesheet" href="/css/app.css" />
   <link rel="icon" href="data:," />
 </head>
 <body>
+  <div class="motion-field" aria-hidden="true">
+    <div class="motion-field__grid"></div>
+    <div class="motion-field__cursor" id="cursor-glow"></div>
+  </div>
   <div class="app">
-    <header class="app-header">
-      <div class="app-header__brand">
-        <div data-i18n="app.title">NetPing</div>
-        <small data-i18n="app.subtitle">LAN Latency Monitor</small>
-      </div>
-      <div class="app-header__meta">
-        <span id="clock"></span> · <span id="server-info"></span>
-      </div>
-      <div class="app-header__right">
-        <div class="monitoring-control">
+    <main>
+      <section class="hero">
+        <div class="hero__mark" aria-hidden="true">
+          <span></span>
+          <i></i>
+        </div>
+        <div class="hero__rule hero__rule--top" aria-hidden="true"></div>
+        <div class="hero__rule hero__rule--right" aria-hidden="true"></div>
+        <div class="monitoring-control hero__start-control">
           <button id="monitoring-toggle" data-state="paused">START</button>
           <div class="monitoring-status">
             <span id="monitoring-state" data-i18n="monitor.paused">PAUSED</span>
             <span id="monitoring-countdown"></span>
           </div>
         </div>
-        <div class="app-header__status" id="overall-status" data-status="online" data-i18n="header.online">ONLINE</div>
-      </div>
-    </header>
-
-    <main>
-      <section class="hero">
-        <div class="hero__number" id="hero-online">0<small>/0</small></div>
-        <div class="kpi-grid">
-          <div class="kpi"><div class="kpi__label" data-i18n="kpi.hosts">Hosts</div><div class="kpi__value" id="kpi-hosts">0</div></div>
-          <div class="kpi"><div class="kpi__label" data-i18n="kpi.online">Online</div><div class="kpi__value" id="kpi-online">0</div></div>
-          <div class="kpi"><div class="kpi__label" data-i18n="kpi.offline">Offline</div><div class="kpi__value" id="kpi-offline">0</div></div>
-          <div class="kpi"><div class="kpi__label" data-i18n="kpi.loss">Loss</div><div class="kpi__value" id="kpi-loss">0.0%</div></div>
+        <div class="hero__copy">
+          <h1 class="hero__sentence">
+            <span class="hero__line"><span class="hero__wordmark" aria-label="ping.me">p<span class="hero__i">ı<span class="hero__i-accent" aria-hidden="true"></span></span>ng<span class="hero__dot" aria-hidden="true"></span>me</span> every</span>
+            <span class="hero__line"><input id="hero-interval" class="hero__input" type="number" min="0.2" max="60" step="0.1" value="1" aria-label="Ping interval in seconds" /> seconds and</span>
+            <span class="hero__line">send <input id="hero-packets" class="hero__input" type="number" min="1" max="10" step="1" value="1" aria-label="Packets per host" /> packets</span>
+            <span class="hero__line">to the host<span class="hero__dot" aria-hidden="true"></span></span>
+          </h1>
+          <div class="hero__hostline">
+            <span id="hero-host-target">127.0.0.1</span>
+          </div>
+          <div class="hero__controls">
+            <div class="hero__status" id="overall-status" data-status="online" data-i18n="header.online">ONLINE</div>
+            <div class="theme-switch" aria-label="Theme">
+              <button id="theme-light" data-i18n="theme.light" aria-pressed="true">Light</button>
+              <button id="theme-dark" data-i18n="theme.dark" aria-pressed="false">Dark</button>
+            </div>
+          </div>
         </div>
+        <a class="hero__scroll" href="#groups" aria-label="Scroll to results">↓</a>
       </section>
 
       <div class="view-toggle-bar">
@@ -61,11 +70,6 @@
       </div>
       <div><span data-i18n="footer.version">VERSION</span> <span id="footer-version">—</span></div>
       <div class="ws-indicator" id="ws-state" data-state="disconnected" data-i18n="ws.disconnected">Disconnected</div>
-      <div>
-        <span data-i18n="footer.theme">THEME</span>
-        <button id="theme-light"  data-i18n="theme.light"  aria-pressed="true">Light</button>
-        <button id="theme-dark"   data-i18n="theme.dark"   aria-pressed="false">Dark</button>
-      </div>
       <div>
         <span data-i18n="footer.language">LANGUAGE</span>
         <button id="lang-en" data-i18n="lang.en" aria-pressed="true">EN</button>

@@ -1,5 +1,5 @@
 {
-  "app.title": "NetPing",
+  "app.title": "ping.me",
   "app.subtitle": "Monitor latenza LAN",
   "header.online": "ONLINE",
   "header.degraded": "DEGRADATO",

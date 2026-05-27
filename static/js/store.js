@@ -19,18 +19,18 @@ export const Store = {
     for (const id of this.samples.keys()) {
       if (!this.hosts.has(id)) this.samples.delete(id);
     }
-    this.notify();
+    this.notify("structure");
   },
 
   setGroups(list) {
     this.groups.clear();
     for (const g of list) this.groups.set(g.name, g);
-    this.notify();
+    this.notify("structure");
   },
 
   upsertGroup(g) {
     this.groups.set(g.name, g);
-    this.notify();
+    this.notify("structure");
   },
 
   groupState(name) {
@@ -39,13 +39,13 @@ export const Store = {
 
   upsertHost(h) {
     this.hosts.set(h.id, h);
-    this.notify();
+    this.notify("structure");
   },
 
   deleteHost(id) {
     this.hosts.delete(id);
     this.samples.delete(id);
-    this.notify();
+    this.notify("structure");
   },
 
   addSample(s) {
@@ -59,7 +59,7 @@ export const Store = {
     entry.failStreak = s.success ? 0 : entry.failStreak + 1;
     entry.stats = recomputeStats(entry.samples);
     entry.status = deriveStatus(entry);
-    this.notify();
+    this.notify("sample");
   },
 
   groupedHosts() {
@@ -98,8 +98,8 @@ export const Store = {
     return () => this.listeners.delete(fn);
   },
 
-  notify() {
-    for (const fn of this.listeners) fn();
+  notify(reason = "change") {
+    for (const fn of this.listeners) fn(reason);
   },
 };
 

@@ -105,7 +105,7 @@ async def _purge_loop(store: Store, sample_days: int, event_days: int) -> None:
 
 def create_app() -> FastAPI:
     settings = get_settings()
-    app = FastAPI(title="NetPing Dashboard", version="0.0.1", lifespan=lifespan)
+    app = FastAPI(title="ping.me Dashboard", version="0.0.1", lifespan=lifespan)
     app.add_middleware(CSRFGuardMiddleware)
     app.add_middleware(
         CORSMiddleware,
