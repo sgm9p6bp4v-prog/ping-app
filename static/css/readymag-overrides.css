@@ -94,7 +94,10 @@
 
 .result-grid {
   position: absolute;
-  inset: 0;
+  left: 40px;
+  right: 40px;
+  top: 50px;
+  bottom: 50px;
   display: grid;
   grid-template-columns: 59fr 41fr;
   grid-template-rows: 39fr 61fr;
@@ -172,9 +175,9 @@
 
 .result-axis {
   position: absolute;
-  left: clamp(8px, 1.4vw, 20px);
-  top: 0;
-  bottom: 0;
+  left: 30px;
+  top: 50px;
+  bottom: 50px;
   width: 24px;
   border-left: 2px solid rgba(32, 32, 32, 0.36);
   color: rgba(255, 255, 255, 0.74);
@@ -312,21 +315,24 @@
 }
 
 .results-page .host-grid {
-  display: flex;
-  flex-wrap: wrap;
-  align-content: flex-start;
-  gap: clamp(8px, 1vw, 12px);
-  border: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(clamp(116px, 12vw, 148px), clamp(116px, 12vw, 148px)));
+  grid-auto-rows: clamp(116px, 12vw, 148px);
+  justify-content: start;
+  gap: 0;
+  border-top: 2px solid var(--rm-dark);
+  border-left: 2px solid var(--rm-dark);
   background: transparent;
   perspective: none;
 }
 
 .results-page .host-card {
-  width: clamp(116px, 12vw, 148px);
+  width: auto;
   aspect-ratio: 1 / 1;
   min-height: 0;
   padding: clamp(8px, 1.2vw, 14px);
-  border: 0;
+  border-right: 2px solid var(--rm-dark);
+  border-bottom: 2px solid var(--rm-dark);
   background: var(--rm-blue);
   color: var(--rm-white);
   display: flex;
