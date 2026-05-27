@@ -94,13 +94,13 @@
 }
 
 .metric-card--active {
-  background: #e45a45;
+  background: #ff4b3a;
 }
 
 .metric-card--latency {
-  background: #4ca739;
+  background: #00b80f;
 }
 
 .metric-card--packets {
-  background: #4057cb;
+  background: #3e58d1;
 }
