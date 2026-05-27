@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>ping.me</title>
-  <link rel="stylesheet" href="/css/app.css?v=readymag-examples" />
+  <link rel="stylesheet" href="/css/app.css?v=readymag-pitch-pages-4" />
   <link rel="icon" href="data:," />
 </head>
 <body>
@@ -14,19 +14,8 @@
   </div>
   <div class="app">
     <main class="deck-main" id="deck-main" data-page="0">
-      <nav class="design-switcher" aria-label="Design examples">
-        <button data-design-choice="pitch" aria-pressed="true">Pitch</button>
-        <button data-design-choice="flow" aria-pressed="false">Flow</button>
-        <button data-design-choice="ledger" aria-pressed="false">Ledger</button>
-      </nav>
       <div class="deck-track" id="deck-track">
       <section class="hero deck-page">
-        <div class="hero__mark" aria-hidden="true">
-          <span></span>
-          <i></i>
-        </div>
-        <div class="hero__rule hero__rule--top" aria-hidden="true"></div>
-        <div class="hero__rule hero__rule--right" aria-hidden="true"></div>
         <div class="monitoring-control hero__start-control">
           <button id="monitoring-toggle" data-state="paused">START</button>
           <div class="monitoring-status">
@@ -52,11 +41,12 @@
             </div>
           </div>
         </div>
-        <button class="hero__scroll" id="page-next" type="button" aria-label="Show results">→</button>
+        <button class="hero__scroll" id="page-next" type="button" aria-label="Show results" onclick="document.getElementById('deck-main').dataset.page='1'">→</button>
       </section>
 
       <section class="results-page deck-page" id="results-page">
-        <button class="page-back" id="page-back" type="button" aria-label="Back to controls">←</button>
+        <button class="page-back" id="page-back" type="button" aria-label="Back to controls" onclick="document.getElementById('deck-main').dataset.page='0'">←</button>
+        <button class="page-next page-next--results" id="dashboard-next" type="button" aria-label="Show dashboard" onclick="document.getElementById('deck-main').dataset.page='2'">→</button>
       <div class="view-toggle-bar">
         <div class="view-toggle" role="tablist">
           <button id="view-groups" aria-pressed="true" data-i18n="view.groups">GROUPS</button>
@@ -69,6 +59,34 @@
       <section class="groups" id="groups">
         <div class="empty-state" data-i18n="groups.empty">No hosts yet — add one with the + button.</div>
       </section>
+
+      </section>
+
+      <section class="dashboard-page deck-page" id="dashboard-page">
+        <button class="page-back" id="dashboard-back" type="button" aria-label="Back to results" onclick="document.getElementById('deck-main').dataset.page='1'">←</button>
+        <div class="dashboard-page__intro">
+          <p>Results</p>
+          <h2>live network dashboard</h2>
+        </div>
+        <div class="metric-board" aria-label="Network summary">
+          <article class="metric-card metric-card--active">
+            <span>active hosts</span>
+            <strong id="metric-active-hosts">0%</strong>
+          </article>
+          <article class="metric-card metric-card--latency">
+            <span>average response</span>
+            <strong id="metric-avg-rtt">-- ms</strong>
+          </article>
+          <article class="metric-card metric-card--packets">
+            <span>packets</span>
+            <strong id="metric-packets-total">0</strong>
+            <small>
+              <b id="metric-packets-sent">0</b> sent ·
+              <b id="metric-packets-returned">0</b> returned ·
+              <b id="metric-packets-lost">0</b> lost
+            </small>
+          </article>
+        </div>
 
     <footer class="app-footer">
       <div class="app-footer__server">
@@ -91,6 +109,6 @@
   </div>
 
   <script src="/vendor/chart.umd.min.js"></script>
-  <script type="module" src="/js/app.js?v=readymag-examples"></script>
+  <script type="module" src="/js/app.js?v=readymag-pitch-pages-2"></script>
 </body>
 </html>

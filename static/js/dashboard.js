@@ -8,6 +8,12 @@ import { api } from "./api.js";
 const groupsEl = document.getElementById("groups");
 const heroHostTargetEl = document.getElementById("hero-host-target");
 const overallEl = document.getElementById("overall-status");
+const metricActiveHostsEl = document.getElementById("metric-active-hosts");
+const metricAvgRttEl = document.getElementById("metric-avg-rtt");
+const metricPacketsTotalEl = document.getElementById("metric-packets-total");
+const metricPacketsSentEl = document.getElementById("metric-packets-sent");
+const metricPacketsReturnedEl = document.getElementById("metric-packets-returned");
+const metricPacketsLostEl = document.getElementById("metric-packets-lost");
 
 let onHostClickHandler = null;
 export function onHostClick(handler) {
@@ -85,6 +91,33 @@ function renderKpis() {
   else if (c.offline > 0) status = "degraded";
   overallEl.dataset.status = status;
   overallEl.textContent = t(`header.${status}`);
+  renderDashboardMetrics(c);
+}
+
+function renderDashboardMetrics(counts) {
+  if (!metricActiveHostsEl) return;
+  let sent = 0;
+  let failed = 0;
+  let rttSum = 0;
+  let rttCount = 0;
+  for (const entry of Store.samples.values()) {
+    sent += entry.stats.sent;
+    failed += entry.stats.failed;
+    for (const sample of entry.samples) {
+      if (sample.success && sample.rtt_ms != null) {
+        rttSum += sample.rtt_ms;
+        rttCount += 1;
+      }
+    }
+  }
+  const returned = sent - failed;
+  const activePct = counts.total > 0 ? Math.round((counts.online / counts.total) * 100) : 0;
+  metricActiveHostsEl.textContent = `${activePct}%`;
+  metricAvgRttEl.textContent = rttCount > 0 ? `${(rttSum / rttCount).toFixed(1)} ms` : "-- ms";
+  metricPacketsTotalEl.textContent = String(sent);
+  metricPacketsSentEl.textContent = String(sent);
+  metricPacketsReturnedEl.textContent = String(returned);
+  metricPacketsLostEl.textContent = String(failed);
 }
 
 function updateHostCards() {

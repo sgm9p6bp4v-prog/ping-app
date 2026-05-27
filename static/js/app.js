@@ -18,7 +18,7 @@ import { open as openGroupSettings } from "./group-settings.js";
 import { refresh as refreshSuggestions } from "./suggestions.js";
 import { initMotion, enhanceMotion } from "./motion.js";
 import { initPingSettings } from "./ping-settings.js";
-import { initDesignExamples } from "./design-examples.js?v=readymag-examples";
+import { initDesignExamples } from "./design-examples.js?v=readymag-pitch-pages-2";
 
 // ---- theme ------------------------------------------------------------------
 
