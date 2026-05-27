@@ -4,6 +4,7 @@
 import { Store, SLOW_THRESHOLD_MS } from "./store.js";
 import { t } from "./i18n.js";
 import { api } from "./api.js";
+import { open as openDrill } from "./drilldown.js?v=momentum-drill-6";
 
 const groupsEl = document.getElementById("groups");
 const heroHostTargetEl = document.getElementById("hero-host-target");
@@ -230,6 +231,8 @@ function attachHostCardHandlers() {
         if (onHostEditHandler) onHostEditHandler(id);
       } else if (onHostClickHandler) {
         onHostClickHandler(id);
+      } else {
+        openDrill(id);
       }
     };
     el.addEventListener("click", openDetail);
@@ -251,6 +254,7 @@ function hostCardHtml(host) {
   return `
     <article class="host-card" data-status="${status}" data-host-id="${host.id}"
              role="button" tabindex="0"
+             onclick="import('/js/drilldown.js?v=momentum-drill-6').then((m) => m.open(${host.id}))"
              aria-label="${escapeAttr(label)}"
              title="Click: details · Shift+Click: edit">
       <div class="host-card__name">${escapeHtml(host.name)}</div>

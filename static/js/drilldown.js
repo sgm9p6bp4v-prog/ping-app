@@ -1,13 +1,10 @@
 /**
- * Full-screen drill-down view: 60s chart + recent events for one host.
- * Chart.js is global (vendored UMD).
+ * Full-screen drill-down view for one host.
  */
 import { Store } from "./store.js";
 import { t } from "./i18n.js";
-import { api } from "./api.js";
 
 let panel = null;
-let chart = null;
 let currentHostId = null;
 let unsubscribe = null;
 
@@ -34,7 +31,6 @@ export function close() {
   if (panel) panel.style.display = "none";
   currentHostId = null;
   if (unsubscribe) { unsubscribe(); unsubscribe = null; }
-  if (chart) { chart.destroy(); chart = null; }
   document.body.style.overflow = "";
 }
 
@@ -42,22 +38,33 @@ function buildPanel() {
   const el = document.createElement("section");
   el.className = "drill";
   el.innerHTML = `
-    <header class="drill__head">
-      <h1 class="drill__title" id="drill-title">—</h1>
-      <button id="drill-close" data-i18n="drill.close">Close</button>
-    </header>
-    <div class="drill__body">
-      <div class="drill__section">
-        <h2 data-i18n="drill.chart_title">Sixty seconds of latency.</h2>
-        <div class="drill__chart-wrapper">
-          <canvas id="drill-chart"></canvas>
-        </div>
-      </div>
-      <div class="drill__section">
-        <h2 data-i18n="drill.events_title">Recent events.</h2>
-        <div class="events" id="drill-events"></div>
-      </div>
+    <button class="drill__back" id="drill-close" aria-label="${escapeAttr(t("drill.close"))}">←</button>
+    <div class="drill__chrome drill__chrome--top-left">
+      <span>Pitch Deck</span>
+      <span>Momentum</span>
     </div>
+    <div class="drill__chrome drill__chrome--top-right">
+      <span>Problem</span>
+      <span>Solution</span>
+      <span>Team</span>
+      <span>Raise</span>
+      <span>Contact</span>
+    </div>
+    <div class="drill__chrome drill__chrome--bottom-left">
+      <span>Data Flow</span>
+    </div>
+    <div class="drill__chrome drill__chrome--bottom-right">
+      <span>2026</span>
+    </div>
+    <div class="drill__copy">
+      <h1 class="drill__title" id="drill-title">—</h1>
+      <p>Sixty seconds of latency.</p>
+    </div>
+    <div class="drill__metric">
+      <strong id="drill-last">—</strong>
+      <span>Ping latency</span>
+    </div>
+    <div class="drill__bars" id="drill-bars" aria-label="Sixty seconds of latency"></div>
   `;
   document.body.appendChild(el);
   el.querySelector("#drill-close").addEventListener("click", close);
@@ -68,77 +75,24 @@ function buildPanel() {
 }
 
 function fill(host) {
-  panel.querySelector("#drill-title").innerHTML =
-    `${escapeHtml(host.name)} <small>${escapeHtml(host.address)}</small>`;
+  panel.querySelector("#drill-title").textContent = host.name;
   refreshChart();
-  refreshEvents();
 }
 
 function refreshChart() {
   const entry = Store.samples.get(currentHostId);
-  const samples = entry?.samples ?? [];
-  const labels = samples.map((s) => s.ts.slice(11, 19));
-  const data = samples.map((s) => (s.success ? s.rtt_ms : null));
-
-  const canvas = panel.querySelector("#drill-chart");
-  if (!chart) {
-    const cssFg = getCssVar("--fg");
-    const cssMuted = getCssVar("--muted");
-    const cssHairline = getCssVar("--hairline");
-    chart = new Chart(canvas, {
-      type: "line",
-      data: {
-        labels,
-        datasets: [{
-          data,
-          borderColor: cssFg,
-          backgroundColor: "transparent",
-          borderWidth: 1.5,
-          tension: 0,
-          pointRadius: 0,
-          spanGaps: false,
-        }],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        animation: false,
-        plugins: { legend: { display: false }, tooltip: { mode: "index", intersect: false } },
-        scales: {
-          x: { ticks: { color: cssMuted, font: { family: "Inter" } }, grid: { color: cssHairline } },
-          y: { ticks: { color: cssMuted, font: { family: "Inter" } }, grid: { color: cssHairline }, beginAtZero: true },
-        },
-      },
-    });
-  } else {
-    chart.data.labels = labels;
-    chart.data.datasets[0].data = data;
-    chart.update("none");
-  }
-}
-
-async function refreshEvents() {
-  const wrap = panel.querySelector("#drill-events");
-  try {
-    const evs = await api.events({ host_id: currentHostId, limit: 50 });
-    if (!evs.length) {
-      wrap.innerHTML = `<div class="empty-state">${t("drill.no_events")}</div>`;
-      return;
-    }
-    wrap.innerHTML = evs.map((e) => `
-      <div class="event">
-        <div class="event__ts">${escapeHtml(e.ts.slice(11, 19))}</div>
-        <div class="event__type">${escapeHtml(e.type)}</div>
-        <div class="event__msg">${escapeHtml(e.message ?? "")}</div>
-      </div>
-    `).join("");
-  } catch (e) {
-    wrap.innerHTML = `<div class="empty-state">${escapeHtml(e.message)}</div>`;
-  }
-}
-
-function getCssVar(name) {
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  const samples = (entry?.samples ?? []).slice(-60);
+  const values = samples.map((s) => (s.success && s.rtt_ms != null ? s.rtt_ms : null));
+  const max = Math.max(1, ...values.filter((v) => v != null));
+  const last = [...values].reverse().find((v) => v != null);
+  const bars = panel.querySelector("#drill-bars");
+  const lastEl = panel.querySelector("#drill-last");
+  lastEl.textContent = last == null ? "—" : `${last.toFixed(1)} ms`;
+  bars.innerHTML = values.map((value) => {
+    const height = value == null ? 10 : Math.max(10, Math.round((value / max) * 100));
+    const label = value == null ? "timeout" : `${value.toFixed(1)} ms`;
+    return `<span class="drill__bar" style="--bar-height:${height}%" title="${escapeAttr(label)}"></span>`;
+  }).join("");
 }
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({

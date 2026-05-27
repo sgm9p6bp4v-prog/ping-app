@@ -373,3 +373,165 @@
 .results-page .host-card__rtt small {
   color: rgba(255, 255, 255, 0.84) !important;
 }
+
+/* ---- Momentum-style host drill-down --------------------------------------- */
+
+.drill {
+  z-index: 120;
+  display: none;
+  grid-template-rows: 1fr;
+  background: var(--rm-grey);
+  color: var(--rm-dark);
+  overflow: hidden;
+}
+
+.drill__head,
+.drill__body,
+.drill__section,
+.events {
+  display: none;
+}
+
+.drill__back {
+  position: absolute;
+  left: clamp(22px, 3.5vw, 42px);
+  top: 50%;
+  z-index: 6;
+  border: 0;
+  background: transparent;
+  color: var(--rm-white);
+  padding: 0;
+  font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  font-size: clamp(44px, 5.4vw, 72px);
+  font-weight: 800;
+  line-height: 0.8;
+  transform: translateY(-50%);
+}
+
+.drill__chrome {
+  position: absolute;
+  z-index: 5;
+  display: none;
+  gap: clamp(24px, 3.5vw, 48px);
+  color: rgba(255, 255, 255, 0.66);
+  font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  font-size: 9px;
+  font-weight: 400;
+  line-height: 1;
+}
+
+.drill__chrome--top-left {
+  left: clamp(38px, 4vw, 58px);
+  top: 27vh;
+}
+
+.drill__chrome--top-right {
+  right: clamp(38px, 4vw, 58px);
+  top: 27vh;
+}
+
+.drill__chrome--bottom-left {
+  left: clamp(38px, 4vw, 58px);
+  bottom: 26.5vh;
+}
+
+.drill__chrome--bottom-right {
+  right: clamp(38px, 4vw, 58px);
+  bottom: 26.5vh;
+}
+
+.drill__copy {
+  position: absolute;
+  left: clamp(38px, 4vw, 58px);
+  top: 31vh;
+  z-index: 4;
+  width: min(66vw, 660px);
+}
+
+.drill__title {
+  color: var(--rm-dark);
+  font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  font-size: clamp(48px, 5.9vw, 58px);
+  font-weight: 800;
+  line-height: 0.96;
+}
+
+.drill__copy p {
+  margin-top: clamp(30px, 4vh, 48px);
+  color: var(--rm-dark);
+  font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.drill__metric {
+  position: absolute;
+  right: clamp(38px, 4vw, 58px);
+  top: 34vh;
+  z-index: 4;
+  width: 170px;
+  color: var(--rm-dark);
+  font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  text-align: center;
+}
+
+.drill__metric strong {
+  display: block;
+  color: var(--rm-dark);
+  font-size: clamp(22px, 2.8vw, 30px);
+  font-weight: 800;
+  line-height: 1;
+}
+
+.drill__metric span {
+  display: block;
+  margin-top: 6px;
+  color: var(--rm-dark);
+  font-size: 14px;
+}
+
+.drill__bars {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 23vh;
+  height: 38vh;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: 0;
+}
+
+.drill__bar {
+  flex: 1 1 0;
+  max-width: 142px;
+  min-width: 4px;
+  height: var(--bar-height);
+  background: #ff4b3a;
+  border-left: 1px solid rgba(157, 157, 157, 0.32);
+}
+
+.drill__bars:empty::before {
+  content: "";
+  flex: 1;
+  height: 22%;
+  background: #ff4b3a;
+}
+
+@media (max-width: 760px) {
+  .drill__chrome--top-right {
+    display: none;
+  }
+  .drill__copy {
+    width: 76vw;
+  }
+  .drill__metric {
+    top: auto;
+    bottom: 64vh;
+    right: 28px;
+  }
+  .drill__bars {
+    bottom: 18vh;
+    height: 34vh;
+  }
+}
