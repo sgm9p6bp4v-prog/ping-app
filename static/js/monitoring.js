@@ -36,8 +36,13 @@ async function onToggle() {
   try {
     state = state.active ? await api.monitoringStop() : await api.monitoringStart();
     render();
-    if (state.active) startTicker();
-    else stopTicker();
+    if (state.active) {
+      startTicker();
+      const deck = document.getElementById("deck-main");
+      if (deck) deck.dataset.page = "1";
+    } else {
+      stopTicker();
+    }
   } catch (e) {
     console.warn("monitoring toggle failed", e);
   } finally {

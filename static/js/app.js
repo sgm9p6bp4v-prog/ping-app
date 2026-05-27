@@ -10,15 +10,15 @@ import { connect as connectWS } from "./ws.js";
 import { api } from "./api.js";
 import {
   render as renderDashboard, renderLive, onHostClick, onHostEdit, onGroupSettings, setViewMode,
-} from "./dashboard.js";
+} from "./dashboard.js?v=readymag-pitch-pages-5";
 import { open as openDrill } from "./drilldown.js";
 import { openAdd, openEdit } from "./editor.js";
-import * as monitoring from "./monitoring.js";
+import * as monitoring from "./monitoring.js?v=readymag-pitch-pages-5";
 import { open as openGroupSettings } from "./group-settings.js";
 import { refresh as refreshSuggestions } from "./suggestions.js";
 import { initMotion, enhanceMotion } from "./motion.js";
 import { initPingSettings } from "./ping-settings.js";
-import { initDesignExamples } from "./design-examples.js?v=readymag-pitch-pages-2";
+import { initDesignExamples } from "./design-examples.js?v=readymag-pitch-pages-5";
 
 // ---- theme ------------------------------------------------------------------
 
