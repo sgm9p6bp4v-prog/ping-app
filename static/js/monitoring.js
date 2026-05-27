@@ -5,6 +5,7 @@
  */
 import { api } from "./api.js";
 import { t } from "./i18n.js";
+import { Store } from "./store.js";
 
 const toggleEl = document.getElementById("monitoring-toggle");
 const stateEl = document.getElementById("monitoring-state");
@@ -33,6 +34,7 @@ export function onWsState(s) {
 
 async function onToggle() {
   toggleEl.disabled = true;
+  const wasActive = state.active;
   try {
     state = state.active ? await api.monitoringStop() : await api.monitoringStart();
     render();
@@ -42,12 +44,29 @@ async function onToggle() {
       if (deck) deck.dataset.page = "1";
     } else {
       stopTicker();
+      if (wasActive) {
+        window.dispatchEvent(new CustomEvent("pingme:monitoring-stopped", {
+          detail: pingSuccessSnapshot(),
+        }));
+      }
     }
   } catch (e) {
     console.warn("monitoring toggle failed", e);
   } finally {
     toggleEl.disabled = false;
   }
+}
+
+function pingSuccessSnapshot() {
+  let sent = 0;
+  let failed = 0;
+  for (const entry of Store.samples.values()) {
+    sent += entry.stats.sent;
+    failed += entry.stats.failed;
+  }
+  const returned = sent - failed;
+  const successPct = sent > 0 ? Math.round((returned / sent) * 100) : 100;
+  return { sent, returned, failed, successPct };
 }
 
 function render() {

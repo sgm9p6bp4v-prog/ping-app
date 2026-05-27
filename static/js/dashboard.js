@@ -14,6 +14,7 @@ const metricPacketsTotalEl = document.getElementById("metric-packets-total");
 const metricPacketsSentEl = document.getElementById("metric-packets-sent");
 const metricPacketsReturnedEl = document.getElementById("metric-packets-returned");
 const metricPacketsLostEl = document.getElementById("metric-packets-lost");
+const metricStopPercentEl = document.getElementById("metric-stop-percent");
 
 let onHostClickHandler = null;
 export function onHostClick(handler) {
@@ -118,7 +119,17 @@ function renderDashboardMetrics(counts) {
   metricPacketsSentEl.textContent = String(sent);
   metricPacketsReturnedEl.textContent = String(returned);
   metricPacketsLostEl.textContent = String(failed);
+  if (metricStopPercentEl && !metricStopPercentEl.dataset.locked) {
+    const successPct = sent > 0 ? Math.round((returned / sent) * 100) : 100;
+    metricStopPercentEl.textContent = `${successPct}%`;
+  }
 }
+
+window.addEventListener("pingme:monitoring-stopped", (event) => {
+  if (!metricStopPercentEl) return;
+  metricStopPercentEl.dataset.locked = "true";
+  metricStopPercentEl.textContent = `${event.detail.successPct}%`;
+});
 
 function updateHostCards() {
   groupsEl.querySelectorAll("[data-host-id]").forEach((card) => {

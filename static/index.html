@@ -65,21 +65,37 @@
 
       <section class="dashboard-page deck-page" id="dashboard-page">
         <button class="page-back" id="dashboard-back" type="button" aria-label="Back to results" onclick="document.getElementById('deck-main').dataset.page='1'">←</button>
-        <div class="dashboard-page__intro">
-          <p>Results</p>
-          <h2>live network dashboard</h2>
+        <div class="result-chrome result-chrome--top-left">
+          <span>Pitch Deck</span>
+          <span>Results</span>
         </div>
-        <div class="metric-board" aria-label="Network summary">
-          <article class="metric-card metric-card--active">
-            <span>active hosts</span>
-            <strong id="metric-active-hosts">0%</strong>
-          </article>
-          <article class="metric-card metric-card--latency">
-            <span>average response</span>
+        <div class="result-chrome result-chrome--top-right">
+          <span>Problem</span>
+          <span>Solution</span>
+          <span>Team</span>
+          <span>Raise</span>
+          <span>Contact</span>
+        </div>
+        <div class="result-chrome result-chrome--bottom-left">
+          <span>Data Flow</span>
+        </div>
+        <div class="result-chrome result-chrome--bottom-right">
+          <span>2026</span>
+        </div>
+        <div class="result-axis" aria-label="Ping success at stop">
+          <span id="metric-stop-percent">100%</span>
+        </div>
+        <div class="result-grid" aria-label="Network summary">
+          <article class="result-tile result-tile--empty" aria-hidden="true"></article>
+          <article class="metric-card metric-card--latency result-tile result-tile--green">
             <strong id="metric-avg-rtt">-- ms</strong>
+            <span>average response</span>
           </article>
-          <article class="metric-card metric-card--packets">
-            <span>packets</span>
+          <article class="metric-card metric-card--active result-tile result-tile--red">
+            <strong id="metric-active-hosts">0%</strong>
+            <span>of hosts active when monitoring stopped</span>
+          </article>
+          <article class="metric-card metric-card--packets result-tile result-tile--blue">
             <strong id="metric-packets-total">0</strong>
             <small>
               <b id="metric-packets-sent">0</b> sent ·
