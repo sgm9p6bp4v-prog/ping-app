@@ -18,6 +18,7 @@ import { open as openGroupSettings } from "./group-settings.js";
 import { refresh as refreshSuggestions } from "./suggestions.js";
 import { initMotion, enhanceMotion } from "./motion.js";
 import { initPingSettings } from "./ping-settings.js";
+import { initDesignExamples } from "./design-examples.js?v=readymag-examples";
 
 // ---- theme ------------------------------------------------------------------
 
@@ -30,6 +31,7 @@ function setTheme(theme) {
 document.getElementById("theme-light").addEventListener("click", () => setTheme("light"));
 document.getElementById("theme-dark").addEventListener("click", () => setTheme("dark"));
 setTheme(localStorage.getItem("netping.theme") ?? "light");
+initDesignExamples();
 
 // ---- clock ------------------------------------------------------------------
 

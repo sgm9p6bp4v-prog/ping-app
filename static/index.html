@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>ping.me</title>
-  <link rel="stylesheet" href="/css/app.css" />
+  <link rel="stylesheet" href="/css/app.css?v=readymag-examples" />
   <link rel="icon" href="data:," />
 </head>
 <body>
@@ -13,8 +13,14 @@
     <div class="motion-field__cursor" id="cursor-glow"></div>
   </div>
   <div class="app">
-    <main>
-      <section class="hero">
+    <main class="deck-main" id="deck-main" data-page="0">
+      <nav class="design-switcher" aria-label="Design examples">
+        <button data-design-choice="pitch" aria-pressed="true">Pitch</button>
+        <button data-design-choice="flow" aria-pressed="false">Flow</button>
+        <button data-design-choice="ledger" aria-pressed="false">Ledger</button>
+      </nav>
+      <div class="deck-track" id="deck-track">
+      <section class="hero deck-page">
         <div class="hero__mark" aria-hidden="true">
           <span></span>
           <i></i>
@@ -46,9 +52,11 @@
             </div>
           </div>
         </div>
-        <a class="hero__scroll" href="#groups" aria-label="Scroll to results">↓</a>
+        <button class="hero__scroll" id="page-next" type="button" aria-label="Show results">→</button>
       </section>
 
+      <section class="results-page deck-page" id="results-page">
+        <button class="page-back" id="page-back" type="button" aria-label="Back to controls">←</button>
       <div class="view-toggle-bar">
         <div class="view-toggle" role="tablist">
           <button id="view-groups" aria-pressed="true" data-i18n="view.groups">GROUPS</button>
@@ -61,7 +69,6 @@
       <section class="groups" id="groups">
         <div class="empty-state" data-i18n="groups.empty">No hosts yet — add one with the + button.</div>
       </section>
-    </main>
 
     <footer class="app-footer">
       <div class="app-footer__server">
@@ -76,11 +83,14 @@
         <button id="lang-it" data-i18n="lang.it" aria-pressed="false">IT</button>
       </div>
     </footer>
+      </section>
+      </div>
+    </main>
 
     <button class="fab" id="fab-add" aria-label="Add host">+</button>
   </div>
 
   <script src="/vendor/chart.umd.min.js"></script>
-  <script type="module" src="/js/app.js"></script>
+  <script type="module" src="/js/app.js?v=readymag-examples"></script>
 </body>
 </html>
