@@ -1,0 +1,35 @@
+{
+  "contract_version": "session-context-record-v1",
+  "kb_generated_session_context_cache": true,
+  "record": {
+    "artifacts": [
+      "89_output/session-end-summary.md"
+    ],
+    "assumptions": [
+      "session-end hook generated structured closeout from available result map"
+    ],
+    "contract_version": "session-context-record-v1",
+    "created_at": "2026-05-28T19:03:02.888476+00:00",
+    "decisions": [
+      "llm_context=skipped:no_version_found",
+      "changes=success",
+      "commit=success"
+    ],
+    "files_touched": [],
+    "knowledge_gaps": [],
+    "objective": "Session-End closeout and context writeback",
+    "outcome": "completed",
+    "repo_path": "/Users/christophvarga/Documents/03_code_repos/client--francesco-ping-app",
+    "runtime": "claude_code",
+    "session_id": "20260528-210301",
+    "sources_read": [
+      "00_infos/runtime/loops/manifest.yaml",
+      "00_infos/meta/open-questions.md"
+    ],
+    "task_id": "session-end",
+    "tests": [
+      "test_task_analysis:covered=3;created=0"
+    ]
+  },
+  "ssot_status": "generated_cache_not_ssot"
+}
