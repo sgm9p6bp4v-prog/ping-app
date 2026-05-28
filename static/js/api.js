@@ -35,6 +35,7 @@ export const api = {
   },
   listGroups:       () => json("GET", "/api/groups"),
   updateGroup:      (name, data) => json("PATCH", `/api/groups/${encodeURIComponent(name)}`, data),
+  deleteGroup:      (name) => json("DELETE", `/api/groups/${encodeURIComponent(name)}`),
   listGroupCidrs:   (name) => json("GET", `/api/groups/${encodeURIComponent(name)}/cidrs`),
   addGroupCidr:     (name, cidr) => json("POST", `/api/groups/${encodeURIComponent(name)}/cidrs`, { cidr }),
   deleteGroupCidr:  (name, cidr) =>

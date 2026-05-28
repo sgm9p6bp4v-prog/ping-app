@@ -1325,6 +1325,12 @@ body.has-pointer .motion-field__cursor {
   gap: 0;
 }
 
+.hero__phrase {
+  display: inline-flex;
+  align-items: baseline;
+  white-space: nowrap;
+}
+
 .hero__i {
   position: relative;
   display: inline-block;
@@ -2035,7 +2041,7 @@ body.has-pointer .motion-field__cursor {
 
 .fab:hover {
   opacity: 1;
-  transform: translateY(-4px) rotate(90deg);
+  transform: none;
   box-shadow: 0 0 0 10px color-mix(in srgb, var(--accent) 25%, transparent);
 }
 
@@ -2234,15 +2240,17 @@ body.has-pointer .motion-field__cursor {
 
 .hero__input,
 .hero__input:focus {
-  width: clamp(0.5em, calc((var(--input-ch, 1) * 0.5em) + 0.04em), 2em);
-  height: 0.9em;
+  width: clamp(0.74em, calc((var(--input-ch, 1) * 0.66em) + 0.18em), 3em);
+  height: 1em;
   color: var(--rm-dark);
-  line-height: 0.9;
+  line-height: 1;
   overflow: visible;
 }
 
 .hero__dot {
-  background: var(--rm-dark);
+  align-self: baseline;
+  background: #ff4b3a;
+  transform: translateY(0);
 }
 
 .hero__i-accent {

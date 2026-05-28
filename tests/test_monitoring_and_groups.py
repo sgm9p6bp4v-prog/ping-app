@@ -124,6 +124,32 @@ async def test_group_patch_collapse(client: AsyncClient) -> None:
     assert r.json()["collapsed"] is True
 
 
+async def test_group_rename_moves_hosts(client: AsyncClient) -> None:
+    await client.post(
+        "/api/hosts", json={"name": "x", "address": "1.1.1.1", "group_name": "external"}
+    )
+    r = await client.patch("/api/groups/external", json={"name": "lan"})
+    assert r.status_code == 200
+    assert r.json()["name"] == "lan"
+
+    hosts = (await client.get("/api/hosts")).json()
+    assert hosts[0]["group_name"] == "lan"
+    groups = (await client.get("/api/groups")).json()
+    assert "lan" in {g["name"] for g in groups}
+    assert "external" not in {g["name"] for g in groups}
+
+
+async def test_group_delete_removes_hosts(client: AsyncClient) -> None:
+    await client.post(
+        "/api/hosts", json={"name": "x", "address": "1.1.1.1", "group_name": "external"}
+    )
+    r = await client.delete("/api/groups/external")
+    assert r.status_code == 204
+    assert (await client.get("/api/hosts")).json() == []
+    groups = (await client.get("/api/groups")).json()
+    assert "external" not in {g["name"] for g in groups}
+
+
 async def test_group_disable_stops_pinging_after_reconcile(
     client: AsyncClient, app: FastAPI
 ) -> None:

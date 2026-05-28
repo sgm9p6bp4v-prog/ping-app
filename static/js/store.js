@@ -33,6 +33,17 @@ export const Store = {
     this.notify("structure");
   },
 
+  deleteGroup(name) {
+    this.groups.delete(name);
+    for (const [id, host] of this.hosts) {
+      if (host.group_name === name) {
+        this.hosts.delete(id);
+        this.samples.delete(id);
+      }
+    }
+    this.notify("structure");
+  },
+
   groupState(name) {
     return this.groups.get(name) ?? { name, enabled: true, collapsed: false };
   },

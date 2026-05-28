@@ -28,7 +28,7 @@ export function initMotion() {
 
 export function enhanceMotion() {
   colorPingDot();
-  splitText(".magnetic-text, .group__name, .host-card__name");
+  splitText(".magnetic-text, .host-card__name");
   observeReveal(".hero, .kpi, .view-toggle-bar, .suggestions, .group, .host-card, .app-footer");
 }
 

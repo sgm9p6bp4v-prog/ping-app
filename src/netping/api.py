@@ -198,6 +198,7 @@ async def history(
 
 
 class GroupPatch(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=80)
     enabled: bool | None = None
     collapsed: bool | None = None
 
@@ -264,7 +265,20 @@ async def list_groups(request: Request) -> list[dict[str, Any]]:
 @router.patch("/api/groups/{name}")
 async def patch_group(name: str, payload: GroupPatch, request: Request) -> dict[str, Any]:
     fields = {k: v for k, v in payload.model_dump().items() if v is not None}
-    g = await _store(request).update_group(name, **fields)
+    new_name = fields.pop("name", None)
+    if new_name is not None:
+        try:
+            g = await _store(request).rename_group(name, new_name)
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        if g is None:
+            raise HTTPException(status_code=404, detail="group not found")
+        await _hub(request).broadcast({
+            "type": "group_renamed", "old_name": name, "group": g.to_dict(),
+        })
+        await _reconcile(request)
+    else:
+        g = await _store(request).update_group(name, **fields)
     if g is None:
         raise HTTPException(status_code=404, detail="group not found")
     await _hub(request).broadcast({"type": "group_updated", "group": g.to_dict()})
@@ -272,6 +286,17 @@ async def patch_group(name: str, payload: GroupPatch, request: Request) -> dict[
     if "enabled" in fields:
         await _reconcile(request)
     return g.to_dict()
+
+
+@router.delete("/api/groups/{name}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_group(name: str, request: Request) -> None:
+    host_ids = await _store(request).delete_group(name)
+    if host_ids is None:
+        raise HTTPException(status_code=404, detail="group not found")
+    for host_id in host_ids:
+        await _hub(request).broadcast({"type": "host_deleted", "host_id": host_id})
+    await _hub(request).broadcast({"type": "group_deleted", "name": name})
+    await _reconcile(request)
 
 
 @router.get("/api/groups/{name}/cidrs")

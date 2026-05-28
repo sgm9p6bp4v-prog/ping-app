@@ -65,7 +65,7 @@
 }
 
 .fab:hover {
-  transform: translateX(-50%) translateY(-4px) rotate(90deg);
+  transform: translateX(-50%);
 }
 
 .deck-main[data-page="0"] + .fab,
@@ -284,7 +284,6 @@
 .results-page .suggestions,
 .results-page .group__collapse,
 .results-page .group__meta,
-.results-page .group__toggle,
 .results-page .group__settings {
   display: none;
 }
@@ -305,7 +304,10 @@
 
 .results-page .group__head {
   position: static;
-  display: block;
+  display: grid;
+  grid-template-columns: minmax(0, auto) 1fr auto auto;
+  align-items: center;
+  gap: clamp(10px, 1.2vw, 18px);
   padding: 0;
   border: 0;
   background: transparent;
@@ -315,6 +317,10 @@
   color: var(--rm-dark);
   font-size: clamp(22px, 3.2vw, 44px);
   line-height: 0.9;
+  outline: none;
+  min-width: 0;
+  max-width: min(58vw, 760px);
+  width: max-content;
 }
 
 .results-page .host-grid {
@@ -323,8 +329,8 @@
   grid-auto-rows: clamp(116px, 12vw, 148px);
   justify-content: start;
   gap: 0;
-  border-top: 2px solid var(--rm-dark);
-  border-left: 2px solid var(--rm-dark);
+  border-top: 10px solid var(--rm-dark);
+  border-left: 10px solid var(--rm-dark);
   background: transparent;
   perspective: none;
 }
@@ -334,8 +340,8 @@
   aspect-ratio: 1 / 1;
   min-height: 0;
   padding: clamp(8px, 1.2vw, 14px);
-  border-right: 2px solid var(--rm-dark);
-  border-bottom: 2px solid var(--rm-dark);
+  border-right: 10px solid var(--rm-dark);
+  border-bottom: 10px solid var(--rm-dark);
   background: var(--rm-blue);
   color: var(--rm-white);
   text-decoration: none;
@@ -355,6 +361,45 @@
 
 .results-page .host-card:hover {
   transform: none;
+}
+
+.results-page .group__toggle,
+.results-page .group__delete {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  min-width: clamp(74px, 7vw, 112px);
+  height: clamp(42px, 4.6vw, 64px);
+  border: 0;
+  border-radius: 999px;
+  background: var(--rm-white);
+  color: var(--rm-blue);
+  font-family: "Roboto", "Inter", system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+  font-size: clamp(13px, 1.3vw, 18px);
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.results-page .group__toggle {
+  grid-column: 3;
+}
+
+.results-page .group__delete {
+  grid-column: 4;
+}
+
+.results-page .group__delete {
+  min-width: clamp(42px, 4.6vw, 64px);
+  font-size: clamp(28px, 3.4vw, 48px);
+}
+
+.results-page .group__name:focus {
+  color: var(--rm-white);
+}
+
+.results-page .group[data-enabled="false"] {
+  opacity: 1;
 }
 
 .results-page .host-card__name {

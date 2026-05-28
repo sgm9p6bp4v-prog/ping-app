@@ -192,7 +192,7 @@ function renderGroups() {
   const html = [];
   for (const [groupName, hosts] of grouped) {
     const gstate = Store.groupState(groupName);
-    const collapsed = gstate.collapsed || !gstate.enabled; // disabled groups default to collapsed
+    const collapsed = gstate.collapsed;
     const online = hosts.filter((h) => statusOf(h.id) === "online" || statusOf(h.id) === "slow").length;
     const offline = hosts.filter((h) => statusOf(h.id) === "offline").length;
     const stateLabel = gstate.enabled ? `${online} ON · ${offline} OFF` : t("group.disabled");
@@ -203,13 +203,18 @@ function renderGroups() {
           <button class="group__collapse" data-group-action="collapse"
                   aria-label="${escapeAttr(t("group.collapse"))}"
                   aria-expanded="${!collapsed}">${collapsed ? "▶" : "▼"}</button>
-          <h2 class="group__name">${escapeHtml(groupName)}</h2>
+          <h2 class="group__name" contenteditable="true" spellcheck="false"
+              data-group-action="rename"
+              aria-label="Rename group">${escapeHtml(groupName)}</h2>
           <div class="group__meta">${hosts.length} · ${stateLabel}</div>
           <button class="group__toggle" data-group-action="toggle"
                   aria-pressed="${!gstate.enabled}"
                   title="${escapeAttr(gstate.enabled ? t("group.disable_hint") : t("group.enable_hint"))}">
-            ${gstate.enabled ? t("group.disable") : t("group.enable")}
+            ${gstate.enabled ? "PAUSE" : "RESUME"}
           </button>
+          <button class="group__delete" data-group-action="delete"
+                  aria-label="Delete group"
+                  title="Delete group">-</button>
           <button class="group__settings" data-group-action="settings"
                   aria-label="${escapeAttr(t("group.settings"))}"
                   title="${escapeAttr(t("group.settings"))}">⚙</button>
@@ -220,7 +225,9 @@ function renderGroups() {
   }
   groupsEl.innerHTML = html.join("");
   attachHostCardHandlers();
+  attachGroupNameHandlers();
   groupsEl.querySelectorAll("[data-group-action]").forEach((btn) => {
+    if (btn.dataset.groupAction === "rename") return;
     btn.addEventListener("click", async (ev) => {
       ev.stopPropagation();
       const section = btn.closest(".group");
@@ -232,11 +239,54 @@ function renderGroups() {
           await api.updateGroup(name, { collapsed: !current.collapsed });
         } else if (action === "toggle") {
           await api.updateGroup(name, { enabled: !current.enabled });
+        } else if (action === "delete") {
+          const ok = confirm(`Cancellare il gruppo "${name}" e tutti i ${section.querySelectorAll("[data-host-id]").length} host al suo interno?`);
+          if (!ok) return;
+          await api.deleteGroup(name);
+          Store.deleteGroup(name);
         } else if (action === "settings") {
           if (onGroupSettingsHandler) onGroupSettingsHandler(name);
         }
       } catch (e) {
         console.warn("group action failed", e);
+      }
+    });
+  });
+}
+
+function attachGroupNameHandlers() {
+  groupsEl.querySelectorAll(".group__name[contenteditable]").forEach((el) => {
+    el.dataset.originalName = el.textContent.trim();
+    el.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") {
+        ev.preventDefault();
+        el.blur();
+      } else if (ev.key === "Escape") {
+        ev.preventDefault();
+        el.textContent = el.dataset.originalName;
+        el.blur();
+      }
+    });
+    el.addEventListener("blur", async () => {
+      const section = el.closest(".group");
+      const oldName = section.dataset.group;
+      const newName = el.textContent.trim();
+      if (!newName || newName === oldName) {
+        el.textContent = oldName;
+        return;
+      }
+      try {
+        const renamed = await api.updateGroup(oldName, { name: newName });
+        if (renamed.name !== newName) {
+          throw new Error("Server needs reload before group rename is available");
+        }
+        const [hosts, groups] = await Promise.all([api.listHosts(), api.listGroups()]);
+        Store.setHosts(hosts);
+        Store.setGroups(groups);
+      } catch (e) {
+        console.warn("group rename failed", e);
+        el.textContent = oldName;
+        alert(e.message || "Could not rename group");
       }
     });
   });
