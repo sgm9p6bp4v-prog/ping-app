@@ -1,8 +1,8 @@
 import { api } from "./api.js";
 import { Store } from "./store.js";
 
-const INTERVAL_KEY = "pingme.interval";
-const PACKETS_KEY = "pingme.packets";
+const INTERVAL_KEY = "pingme.interval.v4";
+const PACKETS_KEY = "pingme.packets.v4";
 let applyingInterval = null;
 
 export function getPingDefaults() {
@@ -17,12 +17,17 @@ export function initPingSettings() {
   const packetsInput = document.getElementById("hero-packets");
   if (!intervalInput || !packetsInput) return;
 
-  const defaults = getPingDefaults();
+  const defaults = { interval: 1, packets: 1 };
   intervalInput.value = defaults.interval;
   packetsInput.value = defaults.packets;
+  localStorage.setItem(INTERVAL_KEY, defaults.interval);
+  localStorage.setItem(PACKETS_KEY, defaults.packets);
+  fitHeroInput(intervalInput);
+  fitHeroInput(packetsInput);
 
   intervalInput.addEventListener("input", () => {
     localStorage.setItem(INTERVAL_KEY, intervalInput.value);
+    fitHeroInput(intervalInput);
   });
   intervalInput.addEventListener("change", () => applyIntervalToHosts(intervalInput));
   intervalInput.addEventListener("keydown", (ev) => {
@@ -33,18 +38,31 @@ export function initPingSettings() {
   });
   packetsInput.addEventListener("input", () => {
     localStorage.setItem(PACKETS_KEY, packetsInput.value);
+    fitHeroInput(packetsInput);
   });
   intervalInput.addEventListener("blur", () => {
     intervalInput.value = clampNumber(intervalInput.value, 1, 0.2, 60);
     localStorage.setItem(INTERVAL_KEY, intervalInput.value);
+    fitHeroInput(intervalInput);
     applyIntervalToHosts(intervalInput);
   });
   packetsInput.addEventListener("blur", () => {
     packetsInput.value = Math.round(clampNumber(packetsInput.value, 1, 1, 10));
     localStorage.setItem(PACKETS_KEY, packetsInput.value);
+    fitHeroInput(packetsInput);
   });
 
   applyIntervalToHosts(intervalInput);
+  setTimeout(() => {
+    if (document.activeElement === intervalInput || document.activeElement === packetsInput) return;
+    intervalInput.value = defaults.interval;
+    packetsInput.value = defaults.packets;
+    localStorage.setItem(INTERVAL_KEY, defaults.interval);
+    localStorage.setItem(PACKETS_KEY, defaults.packets);
+    fitHeroInput(intervalInput);
+    fitHeroInput(packetsInput);
+    applyIntervalToHosts(intervalInput);
+  }, 250);
 }
 
 async function applyIntervalToHosts(input) {
@@ -54,6 +72,7 @@ async function applyIntervalToHosts(input) {
   const interval = clampNumber(input.value, 1, 0.2, 60);
   input.value = interval;
   localStorage.setItem(INTERVAL_KEY, interval);
+  fitHeroInput(input);
   const hosts = [...Store.hosts.values()].filter((host) => host.interval_s !== interval);
   if (hosts.length === 0) return;
   input.disabled = true;
@@ -70,8 +89,13 @@ async function applyIntervalToHosts(input) {
   }
 }
 
+function fitHeroInput(input) {
+  const value = String(input.value || input.placeholder || "1");
+  input.style.setProperty("--input-ch", String(Math.max(1, value.length)));
+}
+
 function clampNumber(value, fallback, min, max) {
-  const n = Number(value);
+  const n = Number(String(value).replace(",", "."));
   if (!Number.isFinite(n)) return fallback;
   return Math.min(max, Math.max(min, n));
 }

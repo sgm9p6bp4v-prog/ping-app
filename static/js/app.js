@@ -10,7 +10,7 @@ import { connect as connectWS } from "./ws.js";
 import { api } from "./api.js";
 import {
   render as renderDashboard, renderLive, onHostEdit, onGroupSettings, setViewMode,
-} from "./dashboard.js?v=host-drill-fix-11";
+} from "./dashboard.js?v=hero-input-flow-5";
 import { openAdd, openEdit } from "./editor.js";
 import * as monitoring from "./monitoring.js?v=readymag-pitch-pages-5";
 import { open as openGroupSettings } from "./group-settings.js";

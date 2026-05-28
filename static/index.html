@@ -4,8 +4,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>ping.me</title>
-  <link rel="stylesheet" href="/css/app.css?v=readymag-pitch-pages-5" />
-  <link rel="stylesheet" href="/css/readymag-overrides.css?v=host-drill-fix-3" />
+  <link rel="stylesheet" href="/css/app.css?v=hero-input-flow-5" />
+  <link rel="stylesheet" href="/css/readymag-overrides.css?v=hero-input-flow-5" />
   <link rel="icon" href="data:," />
 </head>
 <body>
@@ -27,8 +27,8 @@
         <div class="hero__copy">
           <h1 class="hero__sentence">
             <span class="hero__line"><span class="hero__wordmark" aria-label="ping.me">p<span class="hero__i">ı<span class="hero__i-accent" aria-hidden="true"></span></span>ng<span class="hero__dot" aria-hidden="true"></span>me</span> every</span>
-            <span class="hero__line"><input id="hero-interval" class="hero__input" type="number" min="0.2" max="60" step="0.1" value="1" aria-label="Ping interval in seconds" /> seconds and</span>
-            <span class="hero__line">send <input id="hero-packets" class="hero__input" type="number" min="1" max="10" step="1" value="1" aria-label="Packets per host" /> packets</span>
+            <span class="hero__line"><input id="hero-interval" class="hero__input" type="text" inputmode="decimal" value="1" autocomplete="off" aria-label="Ping interval in seconds" /> seconds and</span>
+            <span class="hero__line">send <input id="hero-packets" class="hero__input" type="text" inputmode="numeric" value="1" autocomplete="off" aria-label="Packets per host" /> packets</span>
             <span class="hero__line">to the host<span class="hero__dot" aria-hidden="true"></span></span>
           </h1>
           <div class="hero__hostline">
@@ -126,6 +126,6 @@
   </div>
 
   <script src="/vendor/chart.umd.min.js"></script>
-  <script type="module" src="/js/app.js?v=host-drill-fix-11"></script>
+  <script type="module" src="/js/app.js?v=hero-input-flow-5"></script>
 </body>
 </html>

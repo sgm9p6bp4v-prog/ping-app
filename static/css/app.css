@@ -12,6 +12,22 @@
   src: url("/vendor/inter/Inter-Regular.woff2") format("woff2");
 }
 
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/vendor/inter/Inter-Bold.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 900;
+  font-display: swap;
+  src: url("/vendor/inter/Inter-Black.woff2") format("woff2");
+}
+
 /* ---- Readymag pitch sequence --------------------------------------------- */
 
 :root {
@@ -2198,21 +2214,31 @@ body.has-pointer .motion-field__cursor {
 }
 
 .hero__sentence {
+  --hero-line-height: 0.9;
   color: var(--rm-dark);
   font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
-  font-size: clamp(50px, 8.4vw, 138px);
-  line-height: 0.82;
-  gap: 0.1em;
+  font-size: clamp(44px, 7.4vw, 116px);
+  font-weight: 900;
+  font-synthesis: none;
+  line-height: var(--hero-line-height);
+  gap: 0;
+  overflow: visible;
 }
 
 .hero__line {
-  min-height: 0.82em;
-  line-height: 0.82;
+  align-items: center;
+  min-height: 0;
+  line-height: var(--hero-line-height);
+  overflow: visible;
 }
 
 .hero__input,
 .hero__input:focus {
+  width: clamp(0.5em, calc((var(--input-ch, 1) * 0.5em) + 0.04em), 2em);
+  height: 0.9em;
   color: var(--rm-dark);
+  line-height: 0.9;
+  overflow: visible;
 }
 
 .hero__dot {

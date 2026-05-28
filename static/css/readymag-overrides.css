@@ -26,6 +26,9 @@
 
 .hero__line {
   justify-content: center;
+  align-items: center;
+  gap: 0.11em;
+  overflow: visible;
 }
 
 .hero__hostline {
