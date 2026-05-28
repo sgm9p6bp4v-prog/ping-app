@@ -277,10 +277,11 @@
 /* ---- Readymag calendar-style host map ------------------------------------- */
 
 .results-page {
+  --results-top: clamp(118px, 16vh, 172px);
+  padding: 0;
   overflow: hidden;
 }
 
-.results-page .view-toggle-bar,
 .results-page .suggestions,
 .results-page .group__collapse,
 .results-page .group__meta,
@@ -288,18 +289,55 @@
   display: none;
 }
 
+.results-page .view-toggle-bar {
+  position: absolute;
+  top: clamp(24px, 4vw, 44px);
+  right: 0;
+  z-index: 35;
+  padding: 0;
+}
+
+.results-page .view-toggle {
+  display: inline-flex;
+  gap: 0;
+  border: 0;
+  background: transparent;
+}
+
+.results-page .view-toggle button {
+  min-width: clamp(54px, 5.2vw, 78px);
+  height: clamp(28px, 2.8vw, 38px);
+  border: 0;
+  border-radius: 999px 0 0 999px;
+  background: var(--rm-white);
+  color: var(--rm-blue);
+  font-family: "Roboto", "Inter", system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+  font-size: clamp(10px, 0.9vw, 13px);
+  font-weight: 400;
+  line-height: 1;
+}
+
+.results-page .view-toggle button + button {
+  border-radius: 0;
+}
+
+.results-page .view-toggle button[aria-pressed="true"] {
+  background: var(--rm-dark);
+  color: var(--rm-white);
+}
+
 .results-page .groups {
   height: 100%;
-  padding: clamp(88px, 11vh, 128px) clamp(10px, 1.2vw, 18px) clamp(72px, 8vh, 96px);
+  padding: var(--results-top) 0 0;
   display: grid;
-  grid-auto-rows: minmax(0, 1fr);
-  gap: clamp(12px, 1.4vw, 18px);
+  grid-auto-rows: minmax(min-content, auto);
+  gap: clamp(32px, 5vh, 64px);
   overflow: auto;
 }
 
 .results-page .group {
   min-height: 0;
-  gap: clamp(8px, 1vw, 12px);
+  gap: clamp(10px, 1.2vw, 16px);
 }
 
 .results-page .group__head {
@@ -308,7 +346,7 @@
   grid-template-columns: minmax(0, auto) 1fr auto auto;
   align-items: center;
   gap: clamp(10px, 1.2vw, 18px);
-  padding: 0;
+  padding: 0 0 0 clamp(60px, 6vw, 84px);
   border: 0;
   background: transparent;
 }
@@ -325,14 +363,23 @@
 
 .results-page .host-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(clamp(116px, 12vw, 148px), clamp(116px, 12vw, 148px)));
-  grid-auto-rows: clamp(116px, 12vw, 148px);
+  grid-template-columns: repeat(auto-fill, minmax(clamp(108px, 12.5vw, 152px), 1fr));
+  grid-auto-rows: clamp(108px, 12.5vw, 152px);
   justify-content: start;
   gap: 0;
   border-top: 10px solid var(--rm-dark);
   border-left: 10px solid var(--rm-dark);
+  width: 100%;
   background: transparent;
   perspective: none;
+}
+
+.results-page .group--all {
+  min-height: calc(100vh - var(--results-top));
+}
+
+.results-page .group--all .host-grid {
+  min-height: calc(100vh - var(--results-top));
 }
 
 .results-page .host-card {
@@ -368,14 +415,14 @@
   display: inline-grid;
   place-items: center;
   flex: 0 0 auto;
-  min-width: clamp(74px, 7vw, 112px);
-  height: clamp(42px, 4.6vw, 64px);
+  min-width: clamp(44px, 4.2vw, 67px);
+  height: clamp(25px, 2.8vw, 38px);
   border: 0;
   border-radius: 999px;
   background: var(--rm-white);
   color: var(--rm-blue);
   font-family: "Roboto", "Inter", system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
-  font-size: clamp(13px, 1.3vw, 18px);
+  font-size: clamp(8px, 0.8vw, 11px);
   font-weight: 400;
   line-height: 1;
   letter-spacing: 0;
@@ -390,8 +437,8 @@
 }
 
 .results-page .group__delete {
-  min-width: clamp(42px, 4.6vw, 64px);
-  font-size: clamp(28px, 3.4vw, 48px);
+  min-width: clamp(25px, 2.8vw, 38px);
+  font-size: clamp(17px, 2vw, 29px);
 }
 
 .results-page .group__name:focus {

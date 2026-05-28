@@ -74,14 +74,8 @@ function renderIpList() {
     return;
   }
   groupsEl.innerHTML = `
-    <section class="group" data-group="__ip_view__">
-      <header class="group__head">
-        <span></span>
-        <h2 class="group__name">${t("view.ip_title")}</h2>
-        <div class="group__meta">${hosts.length}</div>
-        <span></span>
-      </header>
-      <div class="host-grid">${hosts.map(hostCardHtml).join("")}</div>
+    <section class="group group--all" data-group="__ip_view__">
+      <div class="host-grid host-grid--all">${hosts.map(hostCardHtml).join("")}</div>
     </section>
   `;
   attachHostCardHandlers();
