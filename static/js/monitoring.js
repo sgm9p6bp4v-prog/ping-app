@@ -1,10 +1,12 @@
 /**
- * Monitoring lifecycle UI: START/STOP toggle + 30-min countdown.
+ * Monitoring lifecycle UI: START/STOP toggle.
  * The server boots PAUSED. Pressing START kicks off pinging for
- * `duration_s` seconds; backend auto-stops, broadcasts state via WS.
+ * the configured packet limit, then broadcasts state via WS.
  */
 import { api } from "./api.js";
 import { t } from "./i18n.js";
+import { Store } from "./store.js";
+import { getPacketLimit } from "./ping-settings.js?v=packet-limit-1";
 
 const toggleEl = document.getElementById("monitoring-toggle");
 const stateEl = document.getElementById("monitoring-state");
@@ -25,24 +27,53 @@ export async function init() {
 }
 
 export function onWsState(s) {
+  const wasActive = state.active;
   state = s;
   render();
   if (state.active) startTicker();
   else stopTicker();
+  if (wasActive && !state.active) emitMonitoringStopped();
 }
 
 async function onToggle() {
   toggleEl.disabled = true;
+  const wasActive = state.active;
   try {
-    state = state.active ? await api.monitoringStop() : await api.monitoringStart();
+    state = state.active
+      ? await api.monitoringStop()
+      : await api.monitoringStart({ packet_limit: getPacketLimit() });
     render();
-    if (state.active) startTicker();
-    else stopTicker();
+    if (state.active) {
+      startTicker();
+      const deck = document.getElementById("deck-main");
+      if (deck) deck.dataset.page = "1";
+    } else {
+      stopTicker();
+      if (wasActive) emitMonitoringStopped();
+    }
   } catch (e) {
     console.warn("monitoring toggle failed", e);
   } finally {
     toggleEl.disabled = false;
   }
+}
+
+function emitMonitoringStopped() {
+  window.dispatchEvent(new CustomEvent("pingme:monitoring-stopped", {
+    detail: pingSuccessSnapshot(),
+  }));
+}
+
+function pingSuccessSnapshot() {
+  let sent = 0;
+  let failed = 0;
+  for (const entry of Store.samples.values()) {
+    sent += entry.stats.sent;
+    failed += entry.stats.failed;
+  }
+  const returned = sent - failed;
+  const successPct = sent > 0 ? Math.round((returned / sent) * 100) : 100;
+  return { sent, returned, failed, successPct };
 }
 
 function render() {

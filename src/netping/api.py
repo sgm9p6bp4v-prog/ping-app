@@ -14,7 +14,7 @@ import socket
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query, Request, status
+from fastapi import APIRouter, Body, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field, field_validator
 
 from . import __version__
@@ -75,6 +75,10 @@ class HostPatch(BaseModel):
         return None if v is None else _validate_address(v)
 
 
+class MonitoringStartIn(BaseModel):
+    packet_limit: int | None = Field(default=None, ge=1, le=1000)
+
+
 def _store(request: Request) -> Store:
     return request.app.state.store
 
@@ -108,8 +112,13 @@ async def monitoring_status(request: Request) -> dict[str, Any]:
 
 
 @router.post("/api/monitoring/start")
-async def monitoring_start(request: Request) -> dict[str, Any]:
-    return await _monitoring(request).start()
+async def monitoring_start(
+    request: Request,
+    payload: MonitoringStartIn | None = Body(default=None),
+) -> dict[str, Any]:
+    if payload is None:
+        return await _monitoring(request).start()
+    return await _monitoring(request).start(packet_limit=payload.packet_limit)
 
 
 @router.post("/api/monitoring/stop")
@@ -198,6 +207,7 @@ async def history(
 
 
 class GroupPatch(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=80)
     enabled: bool | None = None
     collapsed: bool | None = None
 
@@ -264,7 +274,20 @@ async def list_groups(request: Request) -> list[dict[str, Any]]:
 @router.patch("/api/groups/{name}")
 async def patch_group(name: str, payload: GroupPatch, request: Request) -> dict[str, Any]:
     fields = {k: v for k, v in payload.model_dump().items() if v is not None}
-    g = await _store(request).update_group(name, **fields)
+    new_name = fields.pop("name", None)
+    if new_name is not None:
+        try:
+            g = await _store(request).rename_group(name, new_name)
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        if g is None:
+            raise HTTPException(status_code=404, detail="group not found")
+        await _hub(request).broadcast({
+            "type": "group_renamed", "old_name": name, "group": g.to_dict(),
+        })
+        await _reconcile(request)
+    else:
+        g = await _store(request).update_group(name, **fields)
     if g is None:
         raise HTTPException(status_code=404, detail="group not found")
     await _hub(request).broadcast({"type": "group_updated", "group": g.to_dict()})
@@ -272,6 +295,17 @@ async def patch_group(name: str, payload: GroupPatch, request: Request) -> dict[
     if "enabled" in fields:
         await _reconcile(request)
     return g.to_dict()
+
+
+@router.delete("/api/groups/{name}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_group(name: str, request: Request) -> None:
+    host_ids = await _store(request).delete_group(name)
+    if host_ids is None:
+        raise HTTPException(status_code=404, detail="group not found")
+    for host_id in host_ids:
+        await _hub(request).broadcast({"type": "host_deleted", "host_id": host_id})
+    await _hub(request).broadcast({"type": "group_deleted", "name": name})
+    await _reconcile(request)
 
 
 @router.get("/api/groups/{name}/cidrs")
@@ -360,3 +394,6 @@ async def _reconcile(request: Request) -> None:
         hosts = await store.list_hosts()
         disabled = await store.disabled_group_names()
         scheduler.reconcile(hosts, disabled_groups=disabled)
+        monitoring = getattr(request.app.state, "monitoring", None)
+        if monitoring is not None:
+            await monitoring.reconcile_packet_targets(hosts, disabled_groups=disabled)

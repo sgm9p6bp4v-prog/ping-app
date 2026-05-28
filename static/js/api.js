@@ -35,6 +35,7 @@ export const api = {
   },
   listGroups:       () => json("GET", "/api/groups"),
   updateGroup:      (name, data) => json("PATCH", `/api/groups/${encodeURIComponent(name)}`, data),
+  deleteGroup:      (name) => json("DELETE", `/api/groups/${encodeURIComponent(name)}`),
   listGroupCidrs:   (name) => json("GET", `/api/groups/${encodeURIComponent(name)}/cidrs`),
   addGroupCidr:     (name, cidr) => json("POST", `/api/groups/${encodeURIComponent(name)}/cidrs`, { cidr }),
   deleteGroupCidr:  (name, cidr) =>
@@ -45,6 +46,6 @@ export const api = {
   dismissSuggestion: (host_id, group_name) =>
     json("POST", "/api/suggestions/dismiss", { host_id, group_name }),
   monitoring:       () => json("GET", "/api/monitoring"),
-  monitoringStart:  () => json("POST", "/api/monitoring/start"),
+  monitoringStart:  (data) => json("POST", "/api/monitoring/start", data),
   monitoringStop:   () => json("POST", "/api/monitoring/stop"),
 };

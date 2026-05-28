@@ -325,6 +325,59 @@ class Store:
             await db.commit()
         return await self.get_group(name)
 
+    async def rename_group(self, old_name: str, new_name: str) -> Group | None:
+        new_name = new_name.strip()
+        if not new_name:
+            raise ValueError("group name must not be empty")
+        if old_name == new_name:
+            return await self.get_group(old_name)
+        async with self._conn() as db:
+            async with db.execute(
+                "SELECT name, enabled, collapsed FROM groups WHERE name = ?", (old_name,),
+            ) as cur:
+                old = await cur.fetchone()
+            if old is None:
+                return None
+            async with db.execute(
+                "SELECT 1 FROM groups WHERE name = ?", (new_name,),
+            ) as cur:
+                if await cur.fetchone() is not None:
+                    raise ValueError("target group already exists")
+
+            await db.execute(
+                "INSERT INTO groups (name, enabled, collapsed) VALUES (?, ?, ?)",
+                (new_name, old["enabled"], old["collapsed"]),
+            )
+            await db.execute(
+                "UPDATE hosts SET group_name = ? WHERE group_name = ?",
+                (new_name, old_name),
+            )
+            await db.execute(
+                "UPDATE group_cidrs SET group_name = ? WHERE group_name = ?",
+                (new_name, old_name),
+            )
+            await db.execute(
+                "UPDATE dismissed_suggestions SET group_name = ? WHERE group_name = ?",
+                (new_name, old_name),
+            )
+            await db.execute("DELETE FROM groups WHERE name = ?", (old_name,))
+            await db.commit()
+        return await self.get_group(new_name)
+
+    async def delete_group(self, name: str) -> list[int] | None:
+        async with self._conn() as db:
+            async with db.execute("SELECT 1 FROM groups WHERE name = ?", (name,)) as cur:
+                if await cur.fetchone() is None:
+                    return None
+            async with db.execute("SELECT id FROM hosts WHERE group_name = ?", (name,)) as cur:
+                host_ids = [r["id"] for r in await cur.fetchall()]
+            await db.execute("DELETE FROM hosts WHERE group_name = ?", (name,))
+            await db.execute("DELETE FROM group_cidrs WHERE group_name = ?", (name,))
+            await db.execute("DELETE FROM dismissed_suggestions WHERE group_name = ?", (name,))
+            await db.execute("DELETE FROM groups WHERE name = ?", (name,))
+            await db.commit()
+        return host_ids
+
     async def list_group_cidrs(self, group_name: str) -> list[str]:
         async with (
             self._conn() as db,

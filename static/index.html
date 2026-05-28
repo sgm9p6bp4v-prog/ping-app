@@ -4,7 +4,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>ping.me</title>
-  <link rel="stylesheet" href="/css/app.css" />
+  <link rel="stylesheet" href="/css/app.css?v=packet-limit-1" />
+  <link rel="stylesheet" href="/css/readymag-overrides.css?v=packet-limit-1" />
   <link rel="icon" href="data:," />
 </head>
 <body>
@@ -13,14 +14,9 @@
     <div class="motion-field__cursor" id="cursor-glow"></div>
   </div>
   <div class="app">
-    <main>
-      <section class="hero">
-        <div class="hero__mark" aria-hidden="true">
-          <span></span>
-          <i></i>
-        </div>
-        <div class="hero__rule hero__rule--top" aria-hidden="true"></div>
-        <div class="hero__rule hero__rule--right" aria-hidden="true"></div>
+    <main class="deck-main" id="deck-main" data-page="0">
+      <div class="deck-track" id="deck-track">
+      <section class="hero deck-page">
         <div class="monitoring-control hero__start-control">
           <button id="monitoring-toggle" data-state="paused">START</button>
           <div class="monitoring-status">
@@ -31,9 +27,9 @@
         <div class="hero__copy">
           <h1 class="hero__sentence">
             <span class="hero__line"><span class="hero__wordmark" aria-label="ping.me">p<span class="hero__i">ı<span class="hero__i-accent" aria-hidden="true"></span></span>ng<span class="hero__dot" aria-hidden="true"></span>me</span> every</span>
-            <span class="hero__line"><input id="hero-interval" class="hero__input" type="number" min="0.2" max="60" step="0.1" value="1" aria-label="Ping interval in seconds" /> seconds and</span>
-            <span class="hero__line">send <input id="hero-packets" class="hero__input" type="number" min="1" max="10" step="1" value="1" aria-label="Packets per host" /> packets</span>
-            <span class="hero__line">to the host<span class="hero__dot" aria-hidden="true"></span></span>
+            <span class="hero__line"><input id="hero-interval" class="hero__input" type="text" inputmode="decimal" value="1" autocomplete="off" aria-label="Ping interval in seconds" /> seconds and</span>
+            <span class="hero__line">send <input id="hero-packets" class="hero__input" type="text" inputmode="numeric" value="1" autocomplete="off" aria-label="Packets per host" /> packets</span>
+            <span class="hero__line"><span class="hero__phrase">to the host<span class="hero__dot" aria-hidden="true"></span></span></span>
           </h1>
           <div class="hero__hostline">
             <span id="hero-host-target">127.0.0.1</span>
@@ -46,13 +42,16 @@
             </div>
           </div>
         </div>
-        <a class="hero__scroll" href="#groups" aria-label="Scroll to results">↓</a>
+        <button class="hero__scroll" id="page-next" type="button" aria-label="Show results" onclick="document.getElementById('deck-main').dataset.page='1'">→</button>
       </section>
 
+      <section class="results-page deck-page" id="results-page">
+        <button class="page-back" id="page-back" type="button" aria-label="Back to controls" onclick="document.getElementById('deck-main').dataset.page='0'">←</button>
+        <button class="page-next page-next--results" id="dashboard-next" type="button" aria-label="Show dashboard" onclick="document.getElementById('deck-main').dataset.page='2'">→</button>
       <div class="view-toggle-bar">
         <div class="view-toggle" role="tablist">
           <button id="view-groups" aria-pressed="true" data-i18n="view.groups">GROUPS</button>
-          <button id="view-ip" aria-pressed="false" data-i18n="view.ip">IP</button>
+          <button id="view-ip" aria-pressed="false" data-i18n="view.ip">ALL</button>
         </div>
       </div>
 
@@ -61,7 +60,50 @@
       <section class="groups" id="groups">
         <div class="empty-state" data-i18n="groups.empty">No hosts yet — add one with the + button.</div>
       </section>
-    </main>
+
+      </section>
+
+      <section class="dashboard-page deck-page" id="dashboard-page">
+        <button class="page-back" id="dashboard-back" type="button" aria-label="Back to results" onclick="document.getElementById('deck-main').dataset.page='1'">←</button>
+        <div class="result-chrome result-chrome--top-left">
+          <span>Pitch Deck</span>
+          <span>Results</span>
+        </div>
+        <div class="result-chrome result-chrome--top-right">
+          <span>Problem</span>
+          <span>Solution</span>
+          <span>Team</span>
+          <span>Raise</span>
+          <span>Contact</span>
+        </div>
+        <div class="result-chrome result-chrome--bottom-left">
+          <span>Data Flow</span>
+        </div>
+        <div class="result-chrome result-chrome--bottom-right">
+          <span>2026</span>
+        </div>
+        <div class="result-axis" aria-label="Ping success at stop">
+          <span id="metric-stop-percent">100%</span>
+        </div>
+        <div class="result-grid" aria-label="Network summary">
+          <article class="result-tile result-tile--empty" aria-hidden="true"></article>
+          <article class="metric-card metric-card--latency result-tile result-tile--green">
+            <strong id="metric-avg-rtt">-- ms</strong>
+            <span>average response</span>
+          </article>
+          <article class="metric-card metric-card--active result-tile result-tile--red">
+            <strong id="metric-active-hosts">0%</strong>
+            <span>of hosts active when monitoring stopped</span>
+          </article>
+          <article class="metric-card metric-card--packets result-tile result-tile--blue">
+            <strong id="metric-packets-total">0</strong>
+            <small>
+              <b id="metric-packets-sent">0</b> sent ·
+              <b id="metric-packets-returned">0</b> returned ·
+              <b id="metric-packets-lost">0</b> lost
+            </small>
+          </article>
+        </div>
 
     <footer class="app-footer">
       <div class="app-footer__server">
@@ -76,11 +118,14 @@
         <button id="lang-it" data-i18n="lang.it" aria-pressed="false">IT</button>
       </div>
     </footer>
+      </section>
+      </div>
+    </main>
 
     <button class="fab" id="fab-add" aria-label="Add host">+</button>
   </div>
 
   <script src="/vendor/chart.umd.min.js"></script>
-  <script type="module" src="/js/app.js"></script>
+  <script type="module" src="/js/app.js?v=packet-limit-1"></script>
 </body>
 </html>

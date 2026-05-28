@@ -9,15 +9,15 @@ import { Store } from "./store.js";
 import { connect as connectWS } from "./ws.js";
 import { api } from "./api.js";
 import {
-  render as renderDashboard, renderLive, onHostClick, onHostEdit, onGroupSettings, setViewMode,
-} from "./dashboard.js";
-import { open as openDrill } from "./drilldown.js";
+  render as renderDashboard, renderLive, onHostEdit, onGroupSettings, setViewMode,
+} from "./dashboard.js?v=edge-grid-2";
 import { openAdd, openEdit } from "./editor.js";
-import * as monitoring from "./monitoring.js";
+import * as monitoring from "./monitoring.js?v=packet-limit-1";
 import { open as openGroupSettings } from "./group-settings.js";
 import { refresh as refreshSuggestions } from "./suggestions.js";
-import { initMotion, enhanceMotion } from "./motion.js";
-import { initPingSettings } from "./ping-settings.js";
+import { initMotion, enhanceMotion } from "./motion.js?v=group-controls-3";
+import { initPingSettings } from "./ping-settings.js?v=packet-limit-1";
+import { initDesignExamples } from "./design-examples.js?v=readymag-pitch-pages-5";
 
 // ---- theme ------------------------------------------------------------------
 
@@ -30,6 +30,7 @@ function setTheme(theme) {
 document.getElementById("theme-light").addEventListener("click", () => setTheme("light"));
 document.getElementById("theme-dark").addEventListener("click", () => setTheme("dark"));
 setTheme(localStorage.getItem("netping.theme") ?? "light");
+initDesignExamples();
 
 // ---- clock ------------------------------------------------------------------
 
@@ -100,6 +101,15 @@ function onWsMessage(msg) {
       Store.upsertGroup(msg.group);
       refreshSuggestions();
       break;
+    case "group_renamed":
+      loadHosts();
+      loadGroups();
+      refreshSuggestions();
+      break;
+    case "group_deleted":
+      Store.deleteGroup(msg.name);
+      refreshSuggestions();
+      break;
     case "group_cidrs_changed":
       refreshSuggestions();
       break;
@@ -119,7 +129,6 @@ function onWsState(state) {
 
 // ---- click handlers ---------------------------------------------------------
 
-onHostClick((id) => openDrill(id));
 onHostEdit((id) => openEdit(id));
 onGroupSettings((name) => openGroupSettings(name));
 document.getElementById("fab-add").addEventListener("click", openAdd);

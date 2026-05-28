@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterator
 from pathlib import Path
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi import FastAPI
@@ -84,6 +85,62 @@ async def test_monitoring_auto_stops_after_duration(client: AsyncClient, app: Fa
     assert (await client.get("/api/monitoring")).json()["active"] is False
 
 
+async def test_monitoring_packet_limit_stops_after_each_active_host(
+    client: AsyncClient,
+) -> None:
+    await client.post(
+        "/api/hosts",
+        json={"name": "a", "address": "1.1.1.1", "interval_s": 0.2},
+    )
+    await client.post(
+        "/api/hosts",
+        json={"name": "b", "address": "1.1.1.2", "interval_s": 0.2},
+    )
+    fake = AsyncMock(
+        return_value={
+            "rtt_ms": 1.0,
+            "success": True,
+            "error": None,
+            "ts": "1970-01-01T00:00:00.000Z",
+            "host": "x",
+        }
+    )
+
+    with patch("netping.pinger.do_ping", fake):
+        r = await client.post("/api/monitoring/start", json={"packet_limit": 2})
+        body = r.json()
+        assert body["active"] is True
+        assert body["limit_mode"] == "packets"
+        assert body["packet_limit"] == 2
+
+        for _ in range(40):
+            if (await client.get("/api/monitoring")).json()["active"] is False:
+                break
+            await asyncio.sleep(0.05)
+
+    assert (await client.get("/api/monitoring")).json()["active"] is False
+    assert fake.await_count >= 4
+
+
+async def test_monitoring_infinite_packet_limit_skips_duration_timer(
+    client: AsyncClient,
+) -> None:
+    r = await client.post("/api/monitoring/start", json={"packet_limit": None})
+    body = r.json()
+    assert body["active"] is True
+    assert body["limit_mode"] == "infinite"
+    assert body["expires_at"] is None
+    await asyncio.sleep(2.5)
+    assert (await client.get("/api/monitoring")).json()["active"] is True
+    await client.post("/api/monitoring/stop")
+
+
+async def test_monitoring_rejects_packet_limit_above_cap(client: AsyncClient) -> None:
+    r = await client.post("/api/monitoring/start", json={"packet_limit": 1001})
+    assert r.status_code == 422
+    assert (await client.get("/api/monitoring")).json()["active"] is False
+
+
 # --- groups -----------------------------------------------------------------
 
 
@@ -122,6 +179,32 @@ async def test_group_patch_collapse(client: AsyncClient) -> None:
     r = await client.patch("/api/groups/external", json={"collapsed": True})
     assert r.status_code == 200
     assert r.json()["collapsed"] is True
+
+
+async def test_group_rename_moves_hosts(client: AsyncClient) -> None:
+    await client.post(
+        "/api/hosts", json={"name": "x", "address": "1.1.1.1", "group_name": "external"}
+    )
+    r = await client.patch("/api/groups/external", json={"name": "lan"})
+    assert r.status_code == 200
+    assert r.json()["name"] == "lan"
+
+    hosts = (await client.get("/api/hosts")).json()
+    assert hosts[0]["group_name"] == "lan"
+    groups = (await client.get("/api/groups")).json()
+    assert "lan" in {g["name"] for g in groups}
+    assert "external" not in {g["name"] for g in groups}
+
+
+async def test_group_delete_removes_hosts(client: AsyncClient) -> None:
+    await client.post(
+        "/api/hosts", json={"name": "x", "address": "1.1.1.1", "group_name": "external"}
+    )
+    r = await client.delete("/api/groups/external")
+    assert r.status_code == 204
+    assert (await client.get("/api/hosts")).json() == []
+    groups = (await client.get("/api/groups")).json()
+    assert "external" not in {g["name"] for g in groups}
 
 
 async def test_group_disable_stops_pinging_after_reconcile(
