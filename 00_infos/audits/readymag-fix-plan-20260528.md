@@ -1,5 +1,14 @@
 All findings verified against the actual code (63/63 tests green as baseline). Delivering the plan.
 
+> **Revision 2026-05-28 (nach Cross-Model Verify durch GPT-5.5 xhigh, Score 7/10 — GO mit Massgaben):**
+> Plan wurde an folgenden Stellen korrigiert/erweitert:
+> - **P0-1:** `.replace("{name}", name)` → Replacement-Funktion (sonst `$&`-Token-Expansion bei Gruppennamen mit `$`).
+> - **P0-2:** Smoke-Test-Aussage zum Back-Button korrigiert; Bootstrap-Pfad fuer initialen Deep-Link (`#host-N` beim Laden) explizit gemacht.
+> - **P0-5:** Folge-Update zielt auf `g.name` (Stripped-Form aus dem Store), nicht auf den rohen `new_name` — verhindert Whitespace-Upsert bei `{name:" lan ",enabled:false}`; Test entsprechend ergaenzt.
+> - **Cluster C:** Fix-vs-HOLD-Widerspruch geloest — Persistenz-Entscheid (HOLD-4) muss VOR Implementation fallen; Fix ist von der Entscheidung abhaengig.
+> - **§3 neu:** Cluster F (uebersehene i18n-Hardcodes, von Verify gemeldet).
+> - **§6:** HOLD-7 (Drilldown-URL-Semantik) ergaenzt.
+
 ---
 
 ## 1. Fix-Strategie
@@ -27,11 +36,14 @@ it.json: `"Cancellare il gruppo \"{name}\" e tutti i {count} host al suo interno
 ```js
 // VORHER (237):
 const ok = confirm(`Cancellare il gruppo "${name}" e tutti i ${section.querySelectorAll("[data-host-id]").length} host al suo interno?`);
-// NACHHER:
+// NACHHER (Replacement-Funktion vermeidet $&-Token-Expansion bei Gruppennamen mit $-Zeichen):
 const count = section.querySelectorAll("[data-host-id]").length;
-const ok = confirm(t("group.delete_confirm").replace("{name}", name).replace("{count}", count));
+const msg = t("group.delete_confirm")
+  .replace("{name}", () => name)
+  .replace("{count}", () => count);
+const ok = confirm(msg);
 ```
-**Test:** kein JS-Runner → manueller Smoke + Key-Parity-Script (§4).
+**Test:** kein JS-Runner → manueller Smoke + Key-Parity-Script (§4). Edge-Case-Test: Gruppe `"a$&b"` anlegen und Delete-Dialog pruefen — Name muss literal angezeigt werden.
 **Risiko:** Platzhalter-Typo → literales `{name}`; abgesichert durch Parity-Script + Smoke.
 
 ### P0-2 — Drilldown öffnet doppelt
@@ -52,9 +64,18 @@ function openHostCard(card, ev) {
   }
 }
 ```
-Behebt nebenbei P1 `dashboard.js:317` (History-Spam — kein Hash-Push mehr). [Annahme] kein Shareable-URL-nach-Klick-Feature heute.
-**Test:** Smoke — ein Drilldown pro Klick; Back-Button kehrt einmalig zurück.
-**Risiko:** Deep-Link beim Laden (`#host-N`) bleibt über `hashchange` funktional. Gering.
+Behebt nebenbei P1 `dashboard.js:317` (History-Spam — kein Hash-Push mehr). [Annahme] kein Shareable-URL-nach-Klick-Feature heute (→ HOLD-7).
+
+**Bootstrap-Deep-Link:** Da `preventDefault` jeden Klick-getriebenen Hash-Push verhindert, bleibt der `hashchange`-Listener ausschliesslich fuer initial geladene URLs zustaendig (`/...#host-N`). Damit das funktioniert, muss `app.js` nach `loadHosts()` (~Zeile 187-193) einmalig den initialen Hash auswerten:
+```js
+// app.js nach erfolgreichem loadHosts():
+const initialHash = window.location.hash.match(/^#host-(\d+)$/);
+if (initialHash) openDrill(Number(initialHash[1]));
+```
+Bei Modal-Close (`drilldown.close()` via Button/Escape, `drilldown.js:74-76`) zusaetzlich `history.replaceState(null, "", window.location.pathname)` ausfuehren, damit ein Reload den Drill nicht wieder oeffnet.
+
+**Test:** Smoke (1) ein Drilldown pro Klick, (2) Reload mit `/#host-3` oeffnet Host 3 einmal, (3) Close → Hash leer → Reload oeffnet keinen Drill mehr. **Korrektur gegenueber v1:** "Back-Button kehrt einmalig zurueck" galt nur wenn der Klick einen History-Eintrag pusht — das tut er nach diesem Fix nicht mehr; Smoke entsprechend angepasst.
+**Risiko:** Falls Francesco Shareable Deep-Links via Klick will → HOLD-7 entscheiden, dann statt `preventDefault` `history.replaceState` (kein Push, kein Doppel-Open).
 
 ### P0-3 — Stiller State-Wipe bei START-während-aktiv
 **Datei:** `src/netping/monitoring.py:67-75`
@@ -114,12 +135,14 @@ if new_name is not None:
         raise HTTPException(status_code=404, detail="group not found")
     await _hub(request).broadcast({"type": "group_renamed", "old_name": name, "group": g.to_dict()})
     await _reconcile(request)
-    name = new_name                       # Folge-Update zielt auf neuen Namen
+    name = g.name                         # Stripped/normalisierte Form aus dem Store, NICHT raw new_name
+                                          # (rename_group strippt new_name in store.py:328-331 — sonst
+                                          # wuerde {name:" lan ",enabled:false} per upsert " lan " schreiben).
 if fields:
     g = await _store(request).update_group(name, **fields)
 ```
-**Test:** neu `test_patch_group_rename_and_disable_together` (assert `name=="lan"` **und** `enabled is False`) + `test_patch_group_whitespace_name_422`.
-**Risiko:** Reihenfolge rename→update auf neuem Namen; `update_group` upsertet existierende Row sauber. Gering.
+**Test:** neu `test_patch_group_rename_and_disable_together` (assert `name=="lan"` **und** `enabled is False`) + `test_patch_group_whitespace_name_422` + **neu** `test_patch_group_rename_with_whitespace_and_disable` (PATCH `{name:" lan ", enabled:false}` → 200; Folge-`GET /api/groups/lan` liefert `enabled:false`; **kein** Row mit Name `" lan "` in DB).
+**Risiko:** Reihenfolge rename→update auf neuem (gestripptem) Namen; `update_group` upsertet existierende Row sauber. Gering.
 
 ### P0-6 — Hardcoded PAUSE/RESUME
 **Datei:** `static/js/dashboard.js:207`
@@ -153,11 +176,23 @@ ${gstate.enabled ? t("group.disable") : t("group.enable")}
 
 **Cluster B — design-examples.js als Production.** Wheel-Hijack `preventDefault` mit `{passive:false}` (`design-examples.js:24-30`) killt nativen Scroll; inline `onclick` (`index.html:45,49,50,67`) dupliziert die JS-Handler (13-16) → CSP-Risiko. → **Teilfix jetzt:** inline `onclick` entfernen (JS-Handler bleiben). **HOLD-3:** Wheel-Deck-Navigation als Default behalten oder hinter `prefers-reduced-motion` gaten?
 
-**Cluster C — ping-settings Race + tote Persistenz.** `setTimeout(…,250)` (`ping-settings.js:73-82`) überschreibt User-Eingabe; `initPingSettings` (27-31) hardcodet Defaults und ignoriert `localStorage` → Persistenz tot (Korrektur: `getPingDefaults` ist **nicht** tot — `editor.js:25` nutzt es). → **Fix jetzt:** `setTimeout`-Reset streichen, beim Init aus `localStorage` über `getPingDefaults()` seeden. **HOLD-4:** sollen Interval/Packets über Reload persistieren? Wenn nein → Keys löschen.
+**Cluster C — ping-settings Race + Persistenz-Frage.** `setTimeout(…,250)` (`ping-settings.js:73-82`) überschreibt User-Eingabe; `initPingSettings` (27-31) hardcodet Defaults und ignoriert `localStorage`. Korrektur zur Audit-Aussage: `getPingDefaults` ist **nicht** tot — `editor.js:25` nutzt es. → **Bedingter Fix:** Der `setTimeout`-Reset wird in jedem Fall gestrichen (echte Race, kein Produktentscheid). Was beim Init passiert haengt aber von HOLD-4 ab — **nicht gleichzeitig als Fix UND HOLD fuehren** (Verify-Mangel v1). Konkret:
+> - **HOLD-4 = "ja, Persistenz gewollt":** `initPingSettings` aus `getPingDefaults()`/`localStorage` seeden, `PACKETS_KEY`/`INTERVAL_KEY` behalten.
+> - **HOLD-4 = "nein":** `localStorage.removeItem(PACKETS_KEY)` + `removeItem(INTERVAL_KEY)`, `getPingDefaults` durch Modul-Defaults ersetzen, `editor.js:25` anpassen.
+>
+> Bis HOLD-4 entschieden ist: **nur** `setTimeout` streichen, Persistenz-Code unberuehrt lassen. Verhindert, dass spaeter Daten beim Reload still veraendert werden.
 
 **Cluster D — Backend-Korrektheit.** `rename_group` nicht atomar (`store.py:334`, `BEGIN IMMEDIATE` ergänzen); `ValueError("empty")` → 422 (in P0‑5 erledigt); `host_deleted` vor `group_deleted` (`api.py:305-307`, Reihenfolge tauschen, P2). → **Fix jetzt** (atomarität + reorder, klein, getestet).
 
-**Cluster E — Cleanup.** drilldown key-type-Inkonsistenz (real bei `drilldown.js:87` auf `Store.samples` **und** `:103` `findHost` auf `Store.hosts` — die genannte Zeile 118 existiert nicht; Datei endet bei 112) → auf `Number(id)` normalisieren. Tote i18n-Keys (`drill.chart_title`, `drill.events_title`, `drill.history*`, `drill.no_events` — grep bestätigt 0 Referenzen) entfernen. `packet_limit`-Range doppelt (`api.py:79` Pydantic + `monitoring.py:145`) — Pydantic am Edge behalten, monitoring-Check als Defense-in-Depth dokumentieren. → **Fix jetzt** (trivial).
+**Cluster E — Cleanup.** drilldown key-type-Inkonsistenz (real bei `drilldown.js:87` auf `Store.samples` **und** `:103` `findHost` auf `Store.hosts` — die genannte Zeile 118 existiert nicht; Datei endet bei 112) → auf `Number(id)` normalisieren. Tote i18n-Keys (`drill.chart_title`, `drill.events_title`, `drill.history*`, `drill.no_events` — grep bestätigt 0 Referenzen) entfernen, **abhaengig von HOLD-5**. `packet_limit`-Range doppelt (`api.py:79` Pydantic + `monitoring.py:145`) — Pydantic am Edge behalten, monitoring-Check als Defense-in-Depth dokumentieren. → **Fix jetzt** (trivial, ausser i18n-Keys → HOLD-5).
+
+**Cluster F — Uebersehene i18n-Hardcodes (von Verify ergaenzt).** Audit-Findings adressieren nur die zwei prominentesten i18n-Verletzungen (P0-1 Delete-Confirm, P0-6 PAUSE/RESUME). Verify meldet weitere Hardcodes ohne `t()`:
+> - `static/js/dashboard.js:202` — Gruppen-Heading-Konstrukt (Label/Placeholder pruefen).
+> - `static/js/dashboard.js:210-211` — Text um den PAUSE/RESUME-Button.
+> - `static/js/dashboard.js:318` — Host-Karten-Label-String.
+> - `static/index.html:92-103` — KPI-Texte im Dashboard-Bereich.
+>
+> → **Follow-up, nicht in diesem Sprint** (P1, nicht P0 — bricht keine Funktionalitaet, nur EN/IT-Konsistenz). Im Sprint-PR als bekannte Restschuld erwaehnen + Folge-Issue `feat/varga-i18n-cleanup` anlegen. Verify-Score 7/10 haengt nicht daran.
 
 ---
 
@@ -169,11 +204,12 @@ ${gstate.enabled ? t("group.disable") : t("group.enable")}
 - `test_monitoring_start_while_active_is_noop` (P0‑3)
 - `test_patch_group_rename_and_disable_together` (P0‑5)
 - `test_patch_group_whitespace_name_422` (P0‑5/P1‑D)
+- `test_patch_group_rename_with_whitespace_and_disable` (P0‑5, neu nach Verify) — `{name:" lan ",enabled:false}` darf weder `" lan "` als Row schreiben noch `enabled` verlieren.
 - rename-Atomarität: schwer deterministisch zu testen → [Annahme] Code-Review genügt, keine Concurrency-Test-Pflicht.
 
 **Manueller Smoke** (`make run` / uvicorn, UI öffnen):
 1. EN wählen, Gruppe anlegen → PAUSE-Button zeigt „PAUSE" (P0‑6); Delete (`-`) → Dialog englisch (P0‑1); IT-Toggle → italienisch.
-2. Host-Karte klicken → Drilldown öffnet **einmal**, Back-Button einmalig (P0‑2).
+2. Host-Karte klicken → Drilldown öffnet **einmal**, kein neuer History-Eintrag; Reload mit `/#host-N` oeffnet Drill genau einmal; Close → Hash leer → Reload oeffnet keinen Drill (P0‑2).
 3. START → STOP (Stop-% merken) → START → Stop-% wieder live (P0‑4).
 4. Hard-Reload, DevTools-Network: jedes Modul einmal geladen, keine `?v`-Dubletten (P0‑7).
 
@@ -202,3 +238,4 @@ Zusätzlich `grep -oE 't\(\"[^\"]+\"' static/js/*.js` gegen die Keysets prüfen 
 - **HOLD-4 (Cluster C):** Sollen Interval/Packet-Settings über Reload persistieren? Entscheidet, ob `localStorage`-Code repariert oder gelöscht wird.
 - **HOLD-5:** Drilldown-Redesign final (keine Rückkehr von History/Events-Tabs)? Voraussetzung fürs Löschen der toten `drill.*`-Keys.
 - **HOLD-6:** Squash der 13 Commits vor PR an Francesco gewünscht, oder readymag-Historie erhalten? → Francescos Präferenz als SSOT-Owner.
+- **HOLD-7 (P0‑2, nach Verify):** Drilldown-URL-Semantik — soll Host-Klick eine sharebare URL erzeugen (Hash bleibt nach Klick) und Back-Button den Drill schliessen, oder ist Drilldown rein modal ohne History? Entscheidet, ob P0‑2 mit `preventDefault` (modal) oder `history.replaceState` (sharebar ohne Push) implementiert wird.
