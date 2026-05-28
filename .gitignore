@@ -6,6 +6,7 @@
 # Auto-Reports vom Session-Hook (lokal, nicht ins Repo)
 /90_reports/
 00_infos/90_reports/
+00_infos/runtime/
 
 # Python
 __pycache__/
