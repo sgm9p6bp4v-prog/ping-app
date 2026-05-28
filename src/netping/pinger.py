@@ -30,6 +30,7 @@ from .store import Event, Host, Sample, Store, utcnow_iso
 OUTAGE_THRESHOLD_FAILS = 3
 
 Broadcaster = Callable[[dict], Awaitable[None]]
+SampleObserver = Callable[[int], None]
 
 
 def build_ping_command(host: str, *, count: int = 1, timeout_s: float = 2.0) -> list[str]:
@@ -91,11 +92,13 @@ class PingScheduler:
         max_concurrent: int = 64,
         timeout_s: float = 2.0,
         broadcaster: Broadcaster | None = None,
+        sample_observer: SampleObserver | None = None,
     ) -> None:
         self.store = store
         self.timeout_s = timeout_s
         self.semaphore = asyncio.Semaphore(max_concurrent)
         self.broadcaster = broadcaster
+        self.sample_observer = sample_observer
         self._tasks: dict[int, asyncio.Task[None]] = {}
         # Cached (address, interval_s) per running host_id so reconcile can
         # detect changes that require a task restart (Grumpy audit Sprint 2).
@@ -186,6 +189,9 @@ class PingScheduler:
                     error=result["error"],
                 )
                 await self.store.enqueue_sample(sample)
+                if self.sample_observer is not None:
+                    with contextlib.suppress(Exception):
+                        self.sample_observer(host.id)
 
                 # Outage detection: emit events on state transitions.
                 if result["success"]:

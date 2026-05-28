@@ -12,11 +12,11 @@ import {
   render as renderDashboard, renderLive, onHostEdit, onGroupSettings, setViewMode,
 } from "./dashboard.js?v=edge-grid-2";
 import { openAdd, openEdit } from "./editor.js";
-import * as monitoring from "./monitoring.js?v=readymag-pitch-pages-5";
+import * as monitoring from "./monitoring.js?v=packet-limit-1";
 import { open as openGroupSettings } from "./group-settings.js";
 import { refresh as refreshSuggestions } from "./suggestions.js";
 import { initMotion, enhanceMotion } from "./motion.js?v=group-controls-3";
-import { initPingSettings } from "./ping-settings.js";
+import { initPingSettings } from "./ping-settings.js?v=packet-limit-1";
 import { initDesignExamples } from "./design-examples.js?v=readymag-pitch-pages-5";
 
 // ---- theme ------------------------------------------------------------------

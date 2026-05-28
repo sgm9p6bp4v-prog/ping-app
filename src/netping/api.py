@@ -14,7 +14,7 @@ import socket
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query, Request, status
+from fastapi import APIRouter, Body, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field, field_validator
 
 from . import __version__
@@ -75,6 +75,10 @@ class HostPatch(BaseModel):
         return None if v is None else _validate_address(v)
 
 
+class MonitoringStartIn(BaseModel):
+    packet_limit: int | None = Field(default=None, ge=1, le=1000)
+
+
 def _store(request: Request) -> Store:
     return request.app.state.store
 
@@ -108,8 +112,13 @@ async def monitoring_status(request: Request) -> dict[str, Any]:
 
 
 @router.post("/api/monitoring/start")
-async def monitoring_start(request: Request) -> dict[str, Any]:
-    return await _monitoring(request).start()
+async def monitoring_start(
+    request: Request,
+    payload: MonitoringStartIn | None = Body(default=None),
+) -> dict[str, Any]:
+    if payload is None:
+        return await _monitoring(request).start()
+    return await _monitoring(request).start(packet_limit=payload.packet_limit)
 
 
 @router.post("/api/monitoring/stop")
@@ -385,3 +394,6 @@ async def _reconcile(request: Request) -> None:
         hosts = await store.list_hosts()
         disabled = await store.disabled_group_names()
         scheduler.reconcile(hosts, disabled_groups=disabled)
+        monitoring = getattr(request.app.state, "monitoring", None)
+        if monitoring is not None:
+            await monitoring.reconcile_packet_targets(hosts, disabled_groups=disabled)

@@ -46,6 +46,6 @@ export const api = {
   dismissSuggestion: (host_id, group_name) =>
     json("POST", "/api/suggestions/dismiss", { host_id, group_name }),
   monitoring:       () => json("GET", "/api/monitoring"),
-  monitoringStart:  () => json("POST", "/api/monitoring/start"),
+  monitoringStart:  (data) => json("POST", "/api/monitoring/start", data),
   monitoringStop:   () => json("POST", "/api/monitoring/stop"),
 };
