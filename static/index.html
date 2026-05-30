@@ -4,8 +4,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>ping.me</title>
-  <link rel="stylesheet" href="/css/app.css?v=packet-limit-1" />
-  <link rel="stylesheet" href="/css/readymag-overrides.css?v=packet-limit-1" />
+  <link rel="stylesheet" href="/css/app.css" />
+  <link rel="stylesheet" href="/css/readymag-overrides.css?v=center-gravity-3" />
   <link rel="icon" href="data:," />
 </head>
 <body>
@@ -32,7 +32,12 @@
             <span class="hero__line"><span class="hero__phrase">to the host<span class="hero__dot" aria-hidden="true"></span></span></span>
           </h1>
           <div class="hero__hostline">
-            <span id="hero-host-target">127.0.0.1</span>
+            <button class="hero__interface-trigger" id="hero-interface-trigger" type="button"
+                    aria-haspopup="listbox" aria-expanded="false"
+                    aria-label="Change ping network interface">
+              <span id="hero-host-target">auto</span>
+            </button>
+            <div class="hero__interface-menu" id="hero-interface-menu" role="listbox" hidden></div>
           </div>
           <div class="hero__controls">
             <div class="hero__status" id="overall-status" data-status="online" data-i18n="header.online">ONLINE</div>
@@ -42,12 +47,12 @@
             </div>
           </div>
         </div>
-        <button class="hero__scroll" id="page-next" type="button" aria-label="Show results" onclick="document.getElementById('deck-main').dataset.page='1'">→</button>
+        <button class="hero__scroll" id="page-next" type="button" aria-label="Show results">→</button>
       </section>
 
       <section class="results-page deck-page" id="results-page">
-        <button class="page-back" id="page-back" type="button" aria-label="Back to controls" onclick="document.getElementById('deck-main').dataset.page='0'">←</button>
-        <button class="page-next page-next--results" id="dashboard-next" type="button" aria-label="Show dashboard" onclick="document.getElementById('deck-main').dataset.page='2'">→</button>
+        <button class="page-back" id="page-back" type="button" aria-label="Back to controls">←</button>
+        <button class="page-next page-next--results" id="dashboard-next" type="button" aria-label="Show dashboard">→</button>
       <div class="view-toggle-bar">
         <div class="view-toggle" role="tablist">
           <button id="view-groups" aria-pressed="true" data-i18n="view.groups">GROUPS</button>
@@ -64,7 +69,7 @@
       </section>
 
       <section class="dashboard-page deck-page" id="dashboard-page">
-        <button class="page-back" id="dashboard-back" type="button" aria-label="Back to results" onclick="document.getElementById('deck-main').dataset.page='1'">←</button>
+        <button class="page-back" id="dashboard-back" type="button" aria-label="Back to results">←</button>
         <div class="result-chrome result-chrome--top-left">
           <span>Pitch Deck</span>
           <span>Results</span>
@@ -126,6 +131,6 @@
   </div>
 
   <script src="/vendor/chart.umd.min.js"></script>
-  <script type="module" src="/js/app.js?v=packet-limit-1"></script>
+  <script type="module" src="/js/app.js?v=center-gravity-3"></script>
 </body>
 </html>

@@ -10,14 +10,16 @@ import { connect as connectWS } from "./ws.js";
 import { api } from "./api.js";
 import {
   render as renderDashboard, renderLive, onHostEdit, onGroupSettings, setViewMode,
-} from "./dashboard.js?v=edge-grid-2";
+} from "./dashboard.js?v=center-gravity-3";
 import { openAdd, openEdit } from "./editor.js";
-import * as monitoring from "./monitoring.js?v=packet-limit-1";
+import { open as openDrill } from "./drilldown.js?v=host-detail-fullscreen-1";
+import * as monitoring from "./monitoring.js";
 import { open as openGroupSettings } from "./group-settings.js";
 import { refresh as refreshSuggestions } from "./suggestions.js";
-import { initMotion, enhanceMotion } from "./motion.js?v=group-controls-3";
-import { initPingSettings } from "./ping-settings.js?v=packet-limit-1";
-import { initDesignExamples } from "./design-examples.js?v=readymag-pitch-pages-5";
+import { initMotion, enhanceMotion } from "./motion.js";
+import { initPingSettings } from "./ping-settings.js";
+import { initDesignExamples } from "./design-examples.js";
+import { initNetworkInterface } from "./network-interface.js?v=interface-select-2";
 
 // ---- theme ------------------------------------------------------------------
 
@@ -185,8 +187,11 @@ Store.subscribe((reason = "sample") => {
   );
 
   await refreshServerInfo();
+  await initNetworkInterface();
   await loadGroups();
   await loadHosts();
+  const initialHostMatch = /^#host-(\d+)$/.exec(window.location.hash);
+  if (initialHostMatch) openDrill(Number(initialHostMatch[1]));
   await monitoring.init();
   await refreshSuggestions();
   setView(localStorage.getItem("netping.view") === "ip" ? "ip" : "groups");

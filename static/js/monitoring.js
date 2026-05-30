@@ -6,7 +6,7 @@
 import { api } from "./api.js";
 import { t } from "./i18n.js";
 import { Store } from "./store.js";
-import { getPacketLimit } from "./ping-settings.js?v=packet-limit-1";
+import { getPacketLimit } from "./ping-settings.js";
 
 const toggleEl = document.getElementById("monitoring-toggle");
 const stateEl = document.getElementById("monitoring-state");
@@ -32,6 +32,7 @@ export function onWsState(s) {
   render();
   if (state.active) startTicker();
   else stopTicker();
+  if (!wasActive && state.active) emitMonitoringStarted();
   if (wasActive && !state.active) emitMonitoringStopped();
 }
 
@@ -45,6 +46,7 @@ async function onToggle() {
     render();
     if (state.active) {
       startTicker();
+      if (!wasActive) emitMonitoringStarted();
       const deck = document.getElementById("deck-main");
       if (deck) deck.dataset.page = "1";
     } else {
@@ -56,6 +58,10 @@ async function onToggle() {
   } finally {
     toggleEl.disabled = false;
   }
+}
+
+function emitMonitoringStarted() {
+  window.dispatchEvent(new CustomEvent("pingme:monitoring-started"));
 }
 
 function emitMonitoringStopped() {

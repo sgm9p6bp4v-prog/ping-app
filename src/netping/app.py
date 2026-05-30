@@ -22,6 +22,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from .api import router as api_router
 from .config import get_settings
 from .monitoring import MonitoringController
+from .network import ping_binding_for_selection
 from .pinger import PingScheduler
 from .store import Store
 from .ws import WebSocketHub
@@ -67,6 +68,10 @@ async def lifespan(app: FastAPI):
         timeout_s=settings.ping_timeout_s,
         broadcaster=hub.broadcast,
     )
+    ping_interface, ping_source = ping_binding_for_selection(
+        await store.get_setting("ping_interface", "auto")
+    )
+    scheduler.set_ping_interface(ping_interface, source_address=ping_source)
     # Pinger is NOT started here — boots PAUSED. Operator presses START in
     # the UI; MonitoringController handles the 30-min auto-stop timer.
     monitoring = MonitoringController(

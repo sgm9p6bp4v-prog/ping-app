@@ -5,11 +5,10 @@ explicit start/stop from the UI. Default state on app boot is PAUSED.
 
 When the operator presses START, the controller:
   - starts the PingScheduler
-  - schedules an auto-stop task that fires after ``duration_s`` seconds
-  - broadcasts the new state to all WS clients (with ``expires_at`` so the
-    front-end can render a countdown)
+  - schedules either a legacy duration auto-stop or a packet-limited run
+  - broadcasts the new state to all WS clients
 
-Pressing START again while already active re-arms the timer from zero.
+Pressing START again while already active is a no-op.
 Pressing STOP cancels the timer and stops the scheduler.
 """
 
@@ -65,14 +64,14 @@ class MonitoringController:
 
     async def start(self, *, packet_limit: int | None | object = _UNSET) -> dict[str, Any]:
         async with self._lock:
-            # Re-arming while already active: cancel old timer + scheduler is
-            # already running, just set a new expiry.
+            if self._active:
+                log.info("monitoring start ignored; already active")
+                return self.status()
             self._cancel_auto_stop()
             self._run_id += 1
             await self._configure_packet_limit(packet_limit)
-            if not self._active:
-                await self.scheduler.start()
-                self._active = True
+            await self.scheduler.start()
+            self._active = True
             if packet_limit is _UNSET:
                 self._expires_at = datetime.now(UTC) + timedelta(seconds=self.duration_s)
                 self._auto_stop_task = asyncio.create_task(

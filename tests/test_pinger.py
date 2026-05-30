@@ -33,6 +33,26 @@ def test_build_ping_command_unix_shape() -> None:
     assert "-c" in cmd
 
 
+def test_build_ping_command_linux_binds_interface(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("netping.pinger.platform.system", lambda: "Linux")
+    cmd = build_ping_command("8.8.8.8", count=1, timeout_s=2.0, interface="eth0")
+    assert cmd == ["ping", "-c", "1", "-W", "2", "-I", "eth0", "8.8.8.8"]
+
+
+def test_build_ping_command_darwin_binds_source_address(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("netping.pinger.platform.system", lambda: "Darwin")
+    cmd = build_ping_command(
+        "8.8.8.8",
+        count=2,
+        timeout_s=3.0,
+        interface="en0",
+        source_address="192.168.1.20",
+    )
+    assert cmd == ["ping", "-c", "2", "-t", "3", "-S", "192.168.1.20", "8.8.8.8"]
+
+
 async def test_do_ping_returns_dict_on_failure() -> None:
     # invalid command path -> FileNotFoundError handled
     with patch("netping.pinger.build_ping_command", return_value=["/nonexistent/ping", "x"]):
@@ -103,7 +123,7 @@ async def test_scheduler_reconcile_restarts_task_on_address_change(store: Store)
         sched.reconcile(await store.list_hosts())
         await asyncio.sleep(0.05)
         assert sched._tasks[h.id] is not task_before
-        assert sched._signatures[h.id] == ("2.2.2.2", 1.0)
+        assert sched._signatures[h.id] == ("2.2.2.2", 1.0, None, None)
 
         # change interval — reconcile should cancel + respawn
         task_mid = sched._tasks[h.id]
@@ -111,7 +131,7 @@ async def test_scheduler_reconcile_restarts_task_on_address_change(store: Store)
         sched.reconcile(await store.list_hosts())
         await asyncio.sleep(0.05)
         assert sched._tasks[h.id] is not task_mid
-        assert sched._signatures[h.id] == ("2.2.2.2", 2.0)
+        assert sched._signatures[h.id] == ("2.2.2.2", 2.0, None, None)
 
         # no change — reconcile should NOT respawn
         task_after = sched._tasks[h.id]
@@ -119,4 +139,30 @@ async def test_scheduler_reconcile_restarts_task_on_address_change(store: Store)
         await asyncio.sleep(0.05)
         assert sched._tasks[h.id] is task_after
 
+        await sched.stop()
+
+
+async def test_scheduler_reconcile_restarts_task_on_interface_change(store: Store) -> None:
+    h = await store.create_host(name="a", address="1.1.1.1", interval_s=1.0)
+    fake = AsyncMock(
+        return_value={
+            "rtt_ms": 1.0,
+            "success": True,
+            "error": None,
+            "ts": "1970-01-01T00:00:00.000Z",
+            "host": "x",
+        }
+    )
+
+    with patch("netping.pinger.do_ping", fake):
+        sched = PingScheduler(store, max_concurrent=4, timeout_s=0.5)
+        await sched.start()
+        task_before = sched._tasks[h.id]
+
+        sched.set_ping_interface("eth0", source_address="192.168.1.20")
+        sched.reconcile(await store.list_hosts())
+        await asyncio.sleep(0.05)
+
+        assert sched._tasks[h.id] is not task_before
+        assert sched._signatures[h.id] == ("1.1.1.1", 1.0, "eth0", "192.168.1.20")
         await sched.stop()

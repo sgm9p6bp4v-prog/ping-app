@@ -14,6 +14,7 @@
   "group.disable": "PAUSE",
   "group.enable": "RESUME",
   "group.disabled": "PAUSED",
+  "group.delete_confirm": "Delete group \"{name}\" and all {count} hosts inside it?",
   "group.collapse": "Toggle group",
   "group.disable_hint": "Stop pinging this group (kept in list)",
   "group.enable_hint": "Resume pinging this group",

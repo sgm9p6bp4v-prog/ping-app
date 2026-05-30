@@ -57,6 +57,15 @@ async def test_host_crud(store: Store) -> None:
 
 
 @pytest.mark.asyncio
+async def test_app_settings_roundtrip(store: Store) -> None:
+    assert await store.get_setting("ping_interface", "auto") == "auto"
+    await store.set_setting("ping_interface", "en0")
+    assert await store.get_setting("ping_interface") == "en0"
+    await store.set_setting("ping_interface", "auto")
+    assert await store.get_setting("ping_interface") == "auto"
+
+
+@pytest.mark.asyncio
 async def test_history_writes_batched(store: Store) -> None:
     h = await store.create_host(name="x", address="1.1.1.1")
     store.start_writer()

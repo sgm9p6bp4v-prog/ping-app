@@ -33,7 +33,14 @@ Broadcaster = Callable[[dict], Awaitable[None]]
 SampleObserver = Callable[[int], None]
 
 
-def build_ping_command(host: str, *, count: int = 1, timeout_s: float = 2.0) -> list[str]:
+def build_ping_command(
+    host: str,
+    *,
+    count: int = 1,
+    timeout_s: float = 2.0,
+    interface: str | None = None,
+    source_address: str | None = None,
+) -> list[str]:
     """Return an OS-appropriate argv for a single ping.
 
     Semantics of the timeout flag differ across platforms — keep them
@@ -49,13 +56,33 @@ def build_ping_command(host: str, *, count: int = 1, timeout_s: float = 2.0) -> 
     if os_name == "Windows":
         return ["ping", "-n", str(count), "-w", str(timeout_ms), host]
     if os_name == "Darwin":
-        return ["ping", "-c", str(count), "-t", str(seconds), host]
-    return ["ping", "-c", str(count), "-W", str(seconds), host]
+        cmd = ["ping", "-c", str(count), "-t", str(seconds)]
+        if source_address:
+            cmd.extend(["-S", source_address])
+        cmd.append(host)
+        return cmd
+    cmd = ["ping", "-c", str(count), "-W", str(seconds)]
+    if interface:
+        cmd.extend(["-I", interface])
+    cmd.append(host)
+    return cmd
 
 
-async def do_ping(address: str, *, timeout_s: float = 2.0) -> dict:
+async def do_ping(
+    address: str,
+    *,
+    timeout_s: float = 2.0,
+    interface: str | None = None,
+    source_address: str | None = None,
+) -> dict:
     """Run one ping and return ``{rtt_ms, success, error, ts, host}``."""
-    cmd = build_ping_command(address, count=1, timeout_s=timeout_s)
+    cmd = build_ping_command(
+        address,
+        count=1,
+        timeout_s=timeout_s,
+        interface=interface,
+        source_address=source_address,
+    )
     ts = utcnow_iso()
     proc = None
     try:
@@ -100,9 +127,11 @@ class PingScheduler:
         self.broadcaster = broadcaster
         self.sample_observer = sample_observer
         self._tasks: dict[int, asyncio.Task[None]] = {}
-        # Cached (address, interval_s) per running host_id so reconcile can
-        # detect changes that require a task restart (Grumpy audit Sprint 2).
-        self._signatures: dict[int, tuple[str, float]] = {}
+        self.ping_interface: str | None = None
+        self.ping_source_address: str | None = None
+        # Cached per running host_id so reconcile can detect changes that
+        # require a task restart (address/interval/interface).
+        self._signatures: dict[int, tuple[str, float, str | None, str | None]] = {}
         self._stop = asyncio.Event()
         # True between start() and stop(). Reconcile no-ops while inactive
         # so CRUD against a paused server doesn't silently start pinging.
@@ -134,6 +163,12 @@ class PingScheduler:
     def is_started(self) -> bool:
         return self._started
 
+    def set_ping_interface(
+        self, interface: str | None, *, source_address: str | None = None
+    ) -> None:
+        self.ping_interface = interface or None
+        self.ping_source_address = source_address if self.ping_interface else None
+
     def reconcile(self, hosts: list[Host], *, disabled_groups: set[str] | None = None) -> None:
         """Sync the running host_loops with the given desired set.
 
@@ -154,7 +189,7 @@ class PingScheduler:
         for hid in list(self._tasks):
             current = desired.get(hid)
             signature = self._signatures.get(hid)
-            if current is None or (current.address, current.interval_s) != signature:
+            if current is None or self._host_signature(current) != signature:
                 task = self._tasks.pop(hid)
                 self._signatures.pop(hid, None)
                 task.cancel()
@@ -166,8 +201,11 @@ class PingScheduler:
 
     # ---- internals -----------------------------------------------------------
 
+    def _host_signature(self, host: Host) -> tuple[str, float, str | None, str | None]:
+        return (host.address, host.interval_s, self.ping_interface, self.ping_source_address)
+
     def _spawn(self, host: Host) -> None:
-        self._signatures[host.id] = (host.address, host.interval_s)
+        self._signatures[host.id] = self._host_signature(host)
         self._tasks[host.id] = asyncio.create_task(
             self._host_loop(host), name=f"ping-host-{host.id}"
         )
@@ -180,7 +218,12 @@ class PingScheduler:
         while not self._stop.is_set():
             try:
                 async with self.semaphore:
-                    result = await do_ping(host.address, timeout_s=self.timeout_s)
+                    result = await do_ping(
+                        host.address,
+                        timeout_s=self.timeout_s,
+                        interface=self.ping_interface,
+                        source_address=self.ping_source_address,
+                    )
                 sample = Sample(
                     host_id=host.id,
                     ts=result["ts"],

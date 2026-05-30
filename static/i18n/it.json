@@ -14,6 +14,7 @@
   "group.disable": "PAUSA",
   "group.enable": "RIPRENDI",
   "group.disabled": "IN PAUSA",
+  "group.delete_confirm": "Cancellare il gruppo \"{name}\" e tutti i {count} host al suo interno?",
   "group.collapse": "Espandi/comprimi",
   "group.disable_hint": "Sospendi il ping di questo gruppo (resta in lista)",
   "group.enable_hint": "Riprendi il ping di questo gruppo",

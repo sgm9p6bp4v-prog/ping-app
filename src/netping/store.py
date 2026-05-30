@@ -89,6 +89,11 @@ CREATE TABLE IF NOT EXISTS dismissed_suggestions (
   FOREIGN KEY (host_id) REFERENCES hosts(id) ON DELETE CASCADE,
   FOREIGN KEY (group_name) REFERENCES groups(name) ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS app_settings (
+  key   TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
 """
 
 
@@ -206,6 +211,24 @@ class Store:
         if self._writer_task is None:
             self._stop.clear()
             self._writer_task = asyncio.create_task(self._writer_loop(), name="store-writer")
+
+    # ---- app settings --------------------------------------------------------
+
+    async def get_setting(self, key: str, default: str | None = None) -> str | None:
+        async with self._conn() as db, db.execute(
+            "SELECT value FROM app_settings WHERE key = ?", (key,),
+        ) as cur:
+            row = await cur.fetchone()
+        return row["value"] if row else default
+
+    async def set_setting(self, key: str, value: str) -> None:
+        async with self._conn() as db:
+            await db.execute(
+                "INSERT INTO app_settings (key, value) VALUES (?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (key, value),
+            )
+            await db.commit()
 
     # ---- connection helper ---------------------------------------------------
 
@@ -332,6 +355,7 @@ class Store:
         if old_name == new_name:
             return await self.get_group(old_name)
         async with self._conn() as db:
+            await db.execute("BEGIN IMMEDIATE")
             async with db.execute(
                 "SELECT name, enabled, collapsed FROM groups WHERE name = ?", (old_name,),
             ) as cur:

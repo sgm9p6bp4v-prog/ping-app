@@ -21,6 +21,8 @@ async function json(method, url, body) {
 
 export const api = {
   info:        () => json("GET", "/api/info"),
+  networkInterfaces: () => json("GET", "/api/network/interfaces"),
+  updateNetworkInterface: (name) => json("PATCH", "/api/network/interface", { name }),
   listHosts:   () => json("GET", "/api/hosts"),
   createHost:  (data) => json("POST", "/api/hosts", data),
   updateHost:  (id, data) => json("PATCH", `/api/hosts/${id}`, data),

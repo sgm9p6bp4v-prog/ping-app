@@ -141,6 +141,16 @@ async def test_monitoring_rejects_packet_limit_above_cap(client: AsyncClient) ->
     assert (await client.get("/api/monitoring")).json()["active"] is False
 
 
+async def test_monitoring_start_while_active_is_noop(client: AsyncClient) -> None:
+    first = (await client.post("/api/monitoring/start", json={"packet_limit": 3})).json()
+    second = (await client.post("/api/monitoring/start", json={"packet_limit": 1})).json()
+
+    assert second["active"] is True
+    assert second["limit_mode"] == first["limit_mode"] == "packets"
+    assert second["packet_limit"] == first["packet_limit"] == 3
+    assert second["packet_counts"] == first["packet_counts"]
+
+
 # --- groups -----------------------------------------------------------------
 
 
@@ -194,6 +204,44 @@ async def test_group_rename_moves_hosts(client: AsyncClient) -> None:
     groups = (await client.get("/api/groups")).json()
     assert "lan" in {g["name"] for g in groups}
     assert "external" not in {g["name"] for g in groups}
+
+
+async def test_patch_group_rename_and_disable_together(client: AsyncClient) -> None:
+    await client.post(
+        "/api/hosts", json={"name": "x", "address": "1.1.1.1", "group_name": "external"}
+    )
+    r = await client.patch("/api/groups/external", json={"name": "lan", "enabled": False})
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["name"] == "lan"
+    assert body["enabled"] is False
+    groups = (await client.get("/api/groups")).json()
+    assert next(g for g in groups if g["name"] == "lan")["enabled"] is False
+
+
+async def test_patch_group_whitespace_name_422(client: AsyncClient) -> None:
+    await client.post(
+        "/api/hosts", json={"name": "x", "address": "1.1.1.1", "group_name": "external"}
+    )
+    r = await client.patch("/api/groups/external", json={"name": "   "})
+
+    assert r.status_code == 422
+
+
+async def test_patch_group_rename_with_whitespace_and_disable(client: AsyncClient) -> None:
+    await client.post(
+        "/api/hosts", json={"name": "x", "address": "1.1.1.1", "group_name": "external"}
+    )
+    r = await client.patch("/api/groups/external", json={"name": " lan ", "enabled": False})
+
+    assert r.status_code == 200
+    assert r.json()["name"] == "lan"
+    groups = (await client.get("/api/groups")).json()
+    names = {g["name"] for g in groups}
+    assert "lan" in names
+    assert " lan " not in names
+    assert next(g for g in groups if g["name"] == "lan")["enabled"] is False
 
 
 async def test_group_delete_removes_hosts(client: AsyncClient) -> None:

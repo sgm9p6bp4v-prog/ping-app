@@ -9,7 +9,9 @@ let currentHostId = null;
 let unsubscribe = null;
 
 export function open(hostId) {
-  const host = findHost(hostId);
+  const id = Number(hostId);
+  if (!Number.isFinite(id)) return;
+  const host = findHost(id);
   if (!host) return;
   if (unsubscribe) {
     unsubscribe();
@@ -36,6 +38,9 @@ export function close() {
   currentHostId = null;
   if (unsubscribe) { unsubscribe(); unsubscribe = null; }
   document.body.style.overflow = "";
+  if (/^#host-\d+$/.test(window.location.hash)) {
+    window.history.replaceState(null, "", window.location.pathname + window.location.search);
+  }
 }
 
 function buildPanel() {
@@ -62,7 +67,7 @@ function buildPanel() {
     </div>
     <div class="drill__copy">
       <h1 class="drill__title" id="drill-title">—</h1>
-      <p>Sixty seconds of latency.</p>
+      <p>${escapeHtml(t("drill.chart_title"))}</p>
     </div>
     <div class="drill__metric">
       <strong id="drill-last">—</strong>
@@ -84,23 +89,23 @@ function fill(host) {
 }
 
 function refreshChart() {
-  const entry = Store.samples.get(currentHostId) ?? Store.samples.get(Number(currentHostId)) ?? Store.samples.get(String(currentHostId));
+  const entry = Store.samples.get(Number(currentHostId));
   const samples = (entry?.samples ?? []).slice(-60);
   const values = samples.map((s) => (s.success && s.rtt_ms != null ? s.rtt_ms : null));
-  const max = Math.max(1, ...values.filter((v) => v != null));
-  const last = [...values].reverse().find((v) => v != null);
+  const max = Math.max(1, ...values.filter((v) => v != null && v > 0));
+  const last = [...values].reverse().find((v) => v != null && v > 0);
   const bars = panel.querySelector("#drill-bars");
   const lastEl = panel.querySelector("#drill-last");
   lastEl.textContent = last == null ? "—" : `${last.toFixed(1)} ms`;
   bars.innerHTML = values.map((value) => {
-    const height = value == null ? 10 : Math.max(10, Math.round((value / max) * 100));
+    const height = value == null || value <= 0 ? 0 : Math.max(2, Math.round((value / max) * 100));
     const label = value == null ? "timeout" : `${value.toFixed(1)} ms`;
     return `<span class="drill__bar" style="--bar-height:${height}%" title="${escapeAttr(label)}"></span>`;
   }).join("");
 }
 
 function findHost(hostId) {
-  return Store.hosts.get(hostId) ?? Store.hosts.get(Number(hostId)) ?? Store.hosts.get(String(hostId));
+  return Store.hosts.get(Number(hostId));
 }
 
 function escapeHtml(s) {

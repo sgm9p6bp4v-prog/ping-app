@@ -11,6 +11,7 @@ export const Store = {
   samples: new Map(), // host_id -> { samples: [], stats: {...}, status: "online"|"slow"|"offline"|"idle" }
   groups: new Map(), // name -> { name, enabled, collapsed }
   serverInfo: null,
+  networkInterface: null,
   listeners: new Set(),
 
   setHosts(list) {

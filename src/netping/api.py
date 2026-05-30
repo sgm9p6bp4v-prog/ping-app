@@ -18,6 +18,7 @@ from fastapi import APIRouter, Body, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field, field_validator
 
 from . import __version__
+from . import network
 from .store import Host, Store
 from .ws import WebSocketHub
 
@@ -79,6 +80,10 @@ class MonitoringStartIn(BaseModel):
     packet_limit: int | None = Field(default=None, ge=1, le=1000)
 
 
+class NetworkInterfacePatch(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+
+
 def _store(request: Request) -> Store:
     return request.app.state.store
 
@@ -128,6 +133,7 @@ async def monitoring_stop(request: Request) -> dict[str, Any]:
 
 @router.get("/api/info")
 async def info(request: Request) -> dict[str, Any]:
+    selected_interface = await _store(request).get_setting("ping_interface", "auto")
     return {
         "version": __version__,
         "ts": datetime.now(UTC).isoformat(timespec="seconds"),
@@ -135,6 +141,7 @@ async def info(request: Request) -> dict[str, Any]:
         "lan_ip": _detect_lan_ip(),
         "os": platform.system(),
         "ws_clients": len(_hub(request)),
+        "ping_interface": network.interface_snapshot(selected_interface),
     }
 
 
@@ -148,6 +155,29 @@ async def info_alias(request: Request) -> dict[str, Any]:
 async def list_hosts(request: Request) -> list[dict[str, Any]]:
     hosts = await _store(request).list_hosts()
     return [h.to_dict() for h in hosts]
+
+
+@router.get("/api/network/interfaces")
+async def network_interfaces(request: Request) -> dict[str, Any]:
+    selected = await _store(request).get_setting("ping_interface", "auto")
+    return network.interface_snapshot(selected)
+
+
+@router.patch("/api/network/interface")
+async def patch_network_interface(
+    payload: NetworkInterfacePatch, request: Request
+) -> dict[str, Any]:
+    selected = network.normalize_interface_selection(payload.name)
+    available = {iface.name for iface in network.list_network_interfaces()}
+    if selected != network.AUTO_INTERFACE and selected not in available:
+        raise HTTPException(status_code=422, detail="network interface not available")
+    await _store(request).set_setting("ping_interface", selected)
+    ping_interface, ping_source = network.ping_binding_for_selection(selected)
+    scheduler = getattr(request.app.state, "scheduler", None)
+    if scheduler is not None:
+        scheduler.set_ping_interface(ping_interface, source_address=ping_source)
+        await _reconcile(request)
+    return network.interface_snapshot(selected)
 
 
 @router.post("/api/hosts", status_code=status.HTTP_201_CREATED)
@@ -275,19 +305,24 @@ async def list_groups(request: Request) -> list[dict[str, Any]]:
 async def patch_group(name: str, payload: GroupPatch, request: Request) -> dict[str, Any]:
     fields = {k: v for k, v in payload.model_dump().items() if v is not None}
     new_name = fields.pop("name", None)
+    g = None
     if new_name is not None:
         try:
             g = await _store(request).rename_group(name, new_name)
         except ValueError as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
+            code = 409 if "exists" in str(exc) else 422
+            raise HTTPException(status_code=code, detail=str(exc)) from exc
         if g is None:
             raise HTTPException(status_code=404, detail="group not found")
         await _hub(request).broadcast({
             "type": "group_renamed", "old_name": name, "group": g.to_dict(),
         })
         await _reconcile(request)
-    else:
+        name = g.name
+    if fields:
         g = await _store(request).update_group(name, **fields)
+    elif new_name is None:
+        g = await _store(request).update_group(name)
     if g is None:
         raise HTTPException(status_code=404, detail="group not found")
     await _hub(request).broadcast({"type": "group_updated", "group": g.to_dict()})
@@ -302,9 +337,9 @@ async def delete_group(name: str, request: Request) -> None:
     host_ids = await _store(request).delete_group(name)
     if host_ids is None:
         raise HTTPException(status_code=404, detail="group not found")
+    await _hub(request).broadcast({"type": "group_deleted", "name": name})
     for host_id in host_ids:
         await _hub(request).broadcast({"type": "host_deleted", "host_id": host_id})
-    await _hub(request).broadcast({"type": "group_deleted", "name": name})
     await _reconcile(request)
 
 

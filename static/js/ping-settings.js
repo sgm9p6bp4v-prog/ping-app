@@ -70,16 +70,6 @@ export function initPingSettings() {
   });
 
   applyIntervalToHosts(intervalInput);
-  setTimeout(() => {
-    if (document.activeElement === intervalInput || document.activeElement === packetsInput) return;
-    intervalInput.value = defaults.interval;
-    packetsInput.value = defaults.packets;
-    localStorage.setItem(INTERVAL_KEY, defaults.interval);
-    localStorage.setItem(PACKETS_KEY, defaults.packets);
-    fitHeroInput(intervalInput);
-    fitHeroInput(packetsInput);
-    applyIntervalToHosts(intervalInput);
-  }, 250);
 }
 
 async function applyIntervalToHosts(input) {

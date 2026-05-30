@@ -151,6 +151,31 @@ async def test_api_info_returns_hostname_and_lan_ip(client: AsyncClient) -> None
     body = r.json()
     for field in ("version", "ts", "hostname", "lan_ip", "os", "ws_clients"):
         assert field in body
+    assert "ping_interface" in body
+
+
+async def test_network_interface_endpoint_persists_selection(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(api_mod.network, "detect_default_interface", lambda: "en0")
+    monkeypatch.setattr(
+        api_mod.network,
+        "list_network_interfaces",
+        lambda: [api_mod.network.NetworkInterface("en0", ["192.168.1.20"], is_default=True)],
+    )
+
+    initial = (await client.get("/api/network/interfaces")).json()
+    assert initial["selected"] == "auto"
+    assert initial["active"]["name"] == "en0"
+
+    updated = (await client.patch("/api/network/interface", json={"name": "en0"})).json()
+    assert updated["selected"] == "en0"
+
+    persisted = (await client.get("/api/network/interfaces")).json()
+    assert persisted["selected"] == "en0"
+
+    missing = await client.patch("/api/network/interface", json={"name": "missing0"})
+    assert missing.status_code == 422
 
 
 async def test_csrf_guard_blocks_write_without_header(app: FastAPI) -> None:
