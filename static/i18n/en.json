@@ -18,6 +18,7 @@
   "group.collapse": "Toggle group",
   "group.disable_hint": "Stop pinging this group (kept in list)",
   "group.enable_hint": "Resume pinging this group",
+  "group.context_hint": "Right-click to pause or resume this group",
   "monitor.active": "ACTIVE",
   "monitor.paused": "PAUSED",
   "monitor.start": "START",

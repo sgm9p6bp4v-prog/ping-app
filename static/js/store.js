@@ -29,9 +29,9 @@ export const Store = {
     this.notify("structure");
   },
 
-  upsertGroup(g) {
+  upsertGroup(g, reason = "group") {
     this.groups.set(g.name, g);
-    this.notify("structure");
+    this.notify(reason);
   },
 
   deleteGroup(name) {

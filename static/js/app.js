@@ -10,7 +10,7 @@ import { connect as connectWS } from "./ws.js";
 import { api } from "./api.js";
 import {
   render as renderDashboard, renderLive, onHostEdit, onGroupSettings, setViewMode,
-} from "./dashboard.js?v=center-gravity-3";
+} from "./dashboard.js?v=large-bubbles-17";
 import { openAdd, openEdit } from "./editor.js";
 import { open as openDrill } from "./drilldown.js?v=host-detail-fullscreen-1";
 import * as monitoring from "./monitoring.js";
@@ -18,7 +18,7 @@ import { open as openGroupSettings } from "./group-settings.js";
 import { refresh as refreshSuggestions } from "./suggestions.js";
 import { initMotion, enhanceMotion } from "./motion.js";
 import { initPingSettings } from "./ping-settings.js";
-import { initDesignExamples } from "./design-examples.js";
+import { initDesignExamples } from "./design-examples.js?v=large-bubbles-17";
 import { initNetworkInterface } from "./network-interface.js?v=interface-select-2";
 
 // ---- theme ------------------------------------------------------------------

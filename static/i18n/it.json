@@ -18,6 +18,7 @@
   "group.collapse": "Espandi/comprimi",
   "group.disable_hint": "Sospendi il ping di questo gruppo (resta in lista)",
   "group.enable_hint": "Riprendi il ping di questo gruppo",
+  "group.context_hint": "Clic destro per mettere in pausa o riprendere il gruppo",
   "monitor.active": "ATTIVO",
   "monitor.paused": "IN PAUSA",
   "monitor.start": "AVVIA",

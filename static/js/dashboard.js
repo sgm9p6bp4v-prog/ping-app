@@ -22,6 +22,30 @@ let bubblePhysicsRunId = 0;
 let bubblePhysicsItems = [];
 let bubblePhysicsBounds = null;
 let bubblePhysicsAttractor = null;
+let bubbleFocusScrollFrame = 0;
+let bubbleFocusScrollStartedAt = 0;
+let bubbleFocusScrollFrom = 0;
+let bubbleFocusScrollTo = 0;
+let bubbleFocusScrollDuration = 0;
+let bubbleFocusScrollTarget = null;
+let groupTooltipTimer = 0;
+let groupTooltipEl = null;
+
+const HOST_DOT_SIZE = 30;
+const HOST_DETAIL_SIZE = 68;
+const HOST_GRID_GAP = 14;
+
+const bubblePhysicsStats = {
+  elapsedMs: 0,
+  frames: 0,
+  itemCount: 0,
+  pairChecks: 0,
+  estimatedPairChecksPerFrame: 0,
+  profile: "",
+  running: false,
+};
+
+if (typeof window !== "undefined") window.__pingMePhysicsStats = bubblePhysicsStats;
 
 let onHostClickHandler = null;
 export function onHostClick(handler) {
@@ -65,6 +89,8 @@ if (deckMainEl) {
     }
   }).observe(deckMainEl, { attributes: true, attributeFilter: ["data-page"] });
 }
+
+document.getElementById("results-page")?.addEventListener("wheel", cancelBubbleFocusScroll, { passive: true });
 
 let viewMode = "groups";  // 'groups' | 'ip'
 export function setViewMode(mode) {
@@ -204,9 +230,18 @@ function updateHostCards() {
     const gstate = Store.groupState(groupName);
     const online = hosts.filter((h) => statusOf(h.id) === "online" || statusOf(h.id) === "slow").length;
     const offline = hosts.filter((h) => statusOf(h.id) === "offline").length;
+    section.dataset.enabled = String(gstate.enabled);
+    section.dataset.collapsed = String(gstate.collapsed);
+    delete section.dataset.pending;
     const meta = section.querySelector(".group__meta");
     if (meta) {
       meta.textContent = `${hosts.length} · ${gstate.enabled ? `${online} ON · ${offline} OFF` : t("group.disabled")}`;
+    }
+    const toggle = section.querySelector('[data-group-action="toggle"]');
+    if (toggle) {
+      toggle.setAttribute("aria-pressed", String(!gstate.enabled));
+      toggle.setAttribute("title", gstate.enabled ? t("group.disable_hint") : t("group.enable_hint"));
+      toggle.textContent = gstate.enabled ? t("group.disable") : t("group.enable");
     }
   });
 }
@@ -233,6 +268,7 @@ function renderGroups() {
       <section class="group" data-group="${escapeAttr(groupName)}"
                data-enabled="${gstate.enabled}" data-collapsed="${collapsed}"
                data-count="${hosts.length}" data-bubble-span="${item.span}"
+               data-tooltip="${escapeAttr(t("group.context_hint"))}"
                style="${style}">
         <header class="group__head">
           <button class="group__collapse" data-group-action="collapse"
@@ -249,7 +285,7 @@ function renderGroups() {
           </button>
           <button class="group__delete" data-group-action="delete"
                   aria-label="Delete group"
-                  title="Delete group">-</button>
+                  title="Delete group">+</button>
           <button class="group__settings" data-group-action="settings"
                   aria-label="${escapeAttr(t("group.settings"))}"
                   title="${escapeAttr(t("group.settings"))}">⚙</button>
@@ -261,6 +297,8 @@ function renderGroups() {
   groupsEl.innerHTML = html.join("");
   attachHostCardHandlers();
   attachGroupNameHandlers();
+  attachGroupContextHandlers();
+  attachGroupTooltipHandlers();
   scheduleHostLabelNormalization();
   scheduleBubblePhysics({ run: isResultsPageVisible(), fromTop: isResultsPageVisible() });
   groupsEl.querySelectorAll("[data-group-action]").forEach((btn) => {
@@ -275,7 +313,8 @@ function renderGroups() {
         if (action === "collapse") {
           await api.updateGroup(name, { collapsed: !current.collapsed });
         } else if (action === "toggle") {
-          await api.updateGroup(name, { enabled: !current.enabled });
+          const updated = await api.updateGroup(name, { enabled: !current.enabled });
+          Store.upsertGroup(updated);
         } else if (action === "delete") {
           const count = section.querySelectorAll("[data-host-id]").length;
           const msg = t("group.delete_confirm")
@@ -336,6 +375,77 @@ function attachGroupNameHandlers() {
         alert(e.message || "Could not rename group");
       }
     });
+  });
+}
+
+function attachGroupContextHandlers() {
+  groupsEl.querySelectorAll(".group[data-group]").forEach((section) => {
+    if (section.dataset.group === "__ip_view__") return;
+    section.addEventListener("contextmenu", async (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      const name = section.dataset.group;
+      const current = Store.groupState(name);
+      section.dataset.pending = "true";
+      try {
+        const updated = await api.updateGroup(name, { enabled: !current.enabled });
+        Store.upsertGroup(updated);
+      } catch (e) {
+        console.warn("group context toggle failed", e);
+        delete section.dataset.pending;
+      }
+    });
+  });
+}
+
+function ensureGroupTooltip() {
+  if (groupTooltipEl) return groupTooltipEl;
+  groupTooltipEl = document.createElement("div");
+  groupTooltipEl.className = "bubble-tooltip";
+  groupTooltipEl.hidden = true;
+  document.body.append(groupTooltipEl);
+  return groupTooltipEl;
+}
+
+function hideGroupTooltip() {
+  if (groupTooltipTimer) {
+    clearTimeout(groupTooltipTimer);
+    groupTooltipTimer = 0;
+  }
+  if (groupTooltipEl) groupTooltipEl.hidden = true;
+}
+
+function positionGroupTooltip(section) {
+  const tooltip = ensureGroupTooltip();
+  tooltip.textContent = section.dataset.tooltip || t("group.context_hint");
+  tooltip.dataset.theme = section.dataset.enabled === "false" ? "light" : "dark";
+  tooltip.hidden = false;
+
+  requestAnimationFrame(() => {
+    const rect = section.getBoundingClientRect();
+    const tipRect = tooltip.getBoundingClientRect();
+    const gap = 10;
+    const left = clamp(12, rect.left + rect.width / 2 - tipRect.width / 2, window.innerWidth - tipRect.width - 12);
+    let top = rect.top - tipRect.height - gap;
+    if (top < 12) top = Math.min(window.innerHeight - tipRect.height - 12, rect.bottom + gap);
+    tooltip.style.left = `${Math.round(left)}px`;
+    tooltip.style.top = `${Math.round(top)}px`;
+  });
+}
+
+function attachGroupTooltipHandlers() {
+  hideGroupTooltip();
+  groupsEl.querySelectorAll(".group[data-group]").forEach((section) => {
+    if (section.dataset.group === "__ip_view__") return;
+    section.addEventListener("pointerenter", () => {
+      hideGroupTooltip();
+      groupTooltipTimer = window.setTimeout(() => {
+        groupTooltipTimer = 0;
+        positionGroupTooltip(section);
+      }, 1000);
+    });
+    section.addEventListener("pointerleave", hideGroupTooltip);
+    section.addEventListener("focusout", hideGroupTooltip);
   });
 }
 
@@ -481,11 +591,9 @@ function occupyBubbleSlot(occupied, col, row, span) {
 
 function groupBubbleStyle({ col, row, span, hostCount, maxHosts, index }) {
   const density = Math.sqrt(hostCount / Math.max(1, maxHosts));
-  const hostCols = Math.max(1, Math.ceil(Math.sqrt(hostCount)));
+  const { cols: hostCols } = hostGridShape(hostCount);
   const titleSize = Math.round(Math.max(14, Math.min(40, 10 + span * 5)));
   const mobileSize = span * 130;
-  const dotSize = Math.round(Math.max(14, Math.min(38, 16 + span * 5 + density * 8 - hostCols)));
-  const detailSize = Math.round(Math.max(68, Math.min(118, 58 + span * 11 + density * 10 - hostCols * 2)));
   return [
     `--bubble-col:${col}`,
     `--bubble-row:${row}`,
@@ -498,8 +606,9 @@ function groupBubbleStyle({ col, row, span, hostCount, maxHosts, index }) {
     `--bubble-title-size:${titleSize}px`,
     `--bubble-mobile-size:${mobileSize}px`,
     `--host-cols:${hostCols}`,
-    `--host-dot-size:${dotSize}px`,
-    `--host-detail-size:${detailSize}px`,
+    `--host-gap:${HOST_GRID_GAP}px`,
+    `--host-dot-size:${HOST_DOT_SIZE}px`,
+    `--host-detail-size:${HOST_DETAIL_SIZE}px`,
   ].join(";");
 }
 
@@ -518,11 +627,14 @@ function isResultsPageVisible() {
 function layoutBubblePhysics({ run, fromTop }) {
   if (groupsEl.dataset.layout !== "bubbles") return;
   cancelBubblePhysics();
+  cancelBubbleFocusScroll();
   const bubbles = [...groupsEl.querySelectorAll(":scope > .group")];
   if (bubbles.length === 0) return;
 
   const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
-  const rect = groupsEl.getBoundingClientRect();
+  groupsEl.style.setProperty("--bubble-canvas-height", "100%");
+  let rect = groupsEl.getBoundingClientRect();
+  const visibleHeight = groupsEl.closest(".results-page")?.clientHeight || window.innerHeight;
   const styles = getComputedStyle(groupsEl);
   const padding = {
     left: cssPx(styles.paddingLeft),
@@ -531,6 +643,12 @@ function layoutBubblePhysics({ run, fromTop }) {
     bottom: cssPx(styles.paddingBottom),
   };
   const usableWidth = Math.max(280, rect.width - padding.left - padding.right);
+  const initialUsableHeight = Math.max(260, rect.height - padding.top - padding.bottom);
+  const previewItems = createBubblePhysicsItems(bubbles, usableWidth, initialUsableHeight);
+  const canvasHeight = estimateBubbleCanvasHeight(previewItems, usableWidth, visibleHeight, padding);
+  groupsEl.style.setProperty("--bubble-canvas-height", `${canvasHeight}px`);
+  groupsEl.dataset.overflow = String(canvasHeight > window.innerHeight + 4);
+  rect = groupsEl.getBoundingClientRect();
   const usableHeight = Math.max(260, rect.height - padding.top - padding.bottom);
   const bounds = {
     left: padding.left,
@@ -554,7 +672,7 @@ function layoutBubblePhysics({ run, fromTop }) {
 
   groupsEl.dataset.bubblePhysics = "running";
   seedBubblePhysics(items, bounds, fromTop);
-  startBubblePhysicsLoop({ minDuration: 2600, maxDuration: 9800 });
+  startBubblePhysicsLoop({ minDuration: 2100, maxDuration: 6200 });
 }
 
 function cancelBubblePhysics() {
@@ -562,6 +680,7 @@ function cancelBubblePhysics() {
   bubblePhysicsItems = [];
   bubblePhysicsBounds = null;
   bubblePhysicsAttractor = null;
+  bubblePhysicsStats.running = false;
   if (bubblePhysicsFrame) {
     cancelAnimationFrame(bubblePhysicsFrame);
     bubblePhysicsFrame = 0;
@@ -577,17 +696,20 @@ function startBubblePhysicsLoop({ minDuration = 1800, maxDuration = 7000 } = {})
 
 function createBubblePhysicsItems(bubbles, usableWidth, usableHeight) {
   const maxHosts = Math.max(1, ...bubbles.map((el) => Number(el.dataset.count) || 1));
-  const maxSize = Math.min(usableWidth * 0.31, usableHeight * 0.5, 500);
-  const minSize = Math.min(maxSize, Math.max(96, Math.min(usableWidth, usableHeight) * 0.14));
+  const viewportMaxSize = Math.min(usableWidth * 0.58, usableHeight * 0.72, 720);
+  const minSize = Math.min(viewportMaxSize, Math.max(96, Math.min(usableWidth, usableHeight) * 0.14));
   const items = bubbles.map((el, index) => {
     const hostCount = Number(el.dataset.count) || 1;
     const span = Number(el.dataset.bubbleSpan) || 2;
     const density = Math.sqrt(hostCount / maxHosts);
     const gridSize = (usableWidth / 12) * span * 1.08;
-    const size = clamp(minSize, gridSize + density * 26, maxSize);
+    const contentSize = minBubbleSizeForHosts(hostCount);
+    const maxSize = Math.max(viewportMaxSize, contentSize);
+    const size = clamp(minSize, Math.max(gridSize + density * 26, contentSize), maxSize);
     return {
       el,
       index,
+      hostCount,
       size,
       r: size / 2,
       mass: Math.max(1, size * size),
@@ -599,17 +721,73 @@ function createBubblePhysicsItems(bubbles, usableWidth, usableHeight) {
       vy: 0,
     };
   });
-  const areaLimit = usableWidth * usableHeight * 0.34;
+  const areaLimit = usableWidth * usableHeight * 0.58;
   const area = items.reduce((sum, item) => sum + Math.PI * item.r * item.r, 0);
   if (area > areaLimit) {
     const scale = Math.sqrt(areaLimit / area);
     for (const item of items) {
-      item.size = Math.max(72, item.size * scale);
+      item.size = Math.max(minBubbleSizeForHosts(item.hostCount), item.size * scale);
       item.r = item.size / 2;
       item.mass = Math.max(1, item.size * item.size);
     }
   }
+  for (const item of items) syncHostSizing(item);
   return items;
+}
+
+function estimateBubbleCanvasHeight(items, usableWidth, currentHeight, padding) {
+  if (items.length === 0) return currentHeight;
+  const totalArea = items.reduce((sum, item) => sum + Math.PI * item.r * item.r, 0);
+  const tallest = Math.max(...items.map((item) => item.size));
+  const areaHeight = (totalArea / Math.max(1, usableWidth)) * 2.05;
+  const breathingRoom = tallest * 0.55 + padding.top + padding.bottom;
+  return Math.ceil(Math.max(window.innerHeight, currentHeight, areaHeight + breathingRoom));
+}
+
+function hostGridShape(hostCount) {
+  const cols = Math.max(1, Math.ceil(Math.sqrt(Math.max(1, hostCount))));
+  return {
+    cols,
+    rows: Math.max(1, Math.ceil(Math.max(1, hostCount) / cols)),
+  };
+}
+
+function minBubbleSizeForHosts(hostCount) {
+  const { cols, rows } = hostGridShape(hostCount);
+  const widthNeeded = (cols * HOST_DETAIL_SIZE + Math.max(0, cols - 1) * HOST_GRID_GAP) / 0.8;
+  const heightNeeded = (rows * HOST_DETAIL_SIZE + Math.max(0, rows - 1) * HOST_GRID_GAP) / 0.48;
+  return Math.max(widthNeeded, heightNeeded);
+}
+
+function syncHostSizing(item) {
+  const hostCount = item.hostCount || Number(item.el.dataset.count) || 1;
+  const { cols, rows } = hostGridShape(hostCount);
+  const gap = HOST_GRID_GAP;
+  const availableWidth = item.size * 0.8;
+  const availableHeight = item.size * 0.52;
+  const cellWidth = (availableWidth - Math.max(0, cols - 1) * gap) / cols;
+  const cellHeight = (availableHeight - Math.max(0, rows - 1) * gap) / rows;
+  const detailSize = Math.min(HOST_DETAIL_SIZE, Math.floor(Math.min(cellWidth, cellHeight)));
+  item.el.style.setProperty("--host-cols", String(cols));
+  item.el.style.setProperty("--host-gap", `${gap}px`);
+  item.el.style.setProperty("--host-detail-size", `${detailSize}px`);
+  item.el.style.setProperty("--host-dot-size", `${HOST_DOT_SIZE}px`);
+  item.el.style.setProperty("--host-name-size", `${clamp(7, detailSize * 0.13, 13).toFixed(1)}px`);
+  item.el.style.setProperty("--host-rtt-size", `${clamp(6, detailSize * 0.11, 12).toFixed(1)}px`);
+  if (hostCount >= 8) {
+    item.el.style.setProperty("--host-grid-top", "30%");
+    item.el.style.setProperty("--host-grid-hover-top", "32%");
+  } else if (hostCount >= 4) {
+    item.el.style.setProperty("--host-grid-top", "36%");
+    item.el.style.setProperty("--host-grid-hover-top", "38%");
+  } else if (hostCount >= 2) {
+    item.el.style.setProperty("--host-grid-top", "48%");
+    item.el.style.setProperty("--host-grid-hover-top", "49%");
+  } else {
+    item.el.style.setProperty("--host-grid-top", "67%");
+    item.el.style.setProperty("--host-grid-hover-top", "67%");
+  }
+  item.el.style.setProperty("--host-grid-bottom", "8%");
 }
 
 function seedBubblePhysics(items, bounds, fromEdges) {
@@ -645,16 +823,33 @@ function animateBubblePhysics(items, bounds, { minDuration, maxDuration }) {
   const runId = bubblePhysicsRunId;
   const startedAt = performance.now();
   let lastTime = startedAt;
+  const profile = bubblePhysicsProfile(items.length);
+  const pairCount = (items.length * Math.max(0, items.length - 1)) / 2;
+  let pairChecks = 0;
+  let frames = 0;
+
+  Object.assign(bubblePhysicsStats, {
+    elapsedMs: 0,
+    frames: 0,
+    itemCount: items.length,
+    pairChecks: 0,
+    estimatedPairChecksPerFrame: pairCount * profile.substeps * profile.collisionIterations,
+    profile: profile.name,
+    running: true,
+  });
+  publishBubblePhysicsStats();
 
   function frame(now) {
     if (runId !== bubblePhysicsRunId) return;
+    frames += 1;
     const dt = clamp(0.5, (now - lastTime) / 16.67, 2);
     lastTime = now;
 
-    for (let substep = 0; substep < 2; substep += 1) {
-      integrateBubbles(items, bounds, dt / 2);
-      for (let iteration = 0; iteration < 4; iteration += 1) {
+    for (let substep = 0; substep < profile.substeps; substep += 1) {
+      integrateBubbles(items, bounds, dt / profile.substeps);
+      for (let iteration = 0; iteration < profile.collisionIterations; iteration += 1) {
         resolveBubbleCollisions(items);
+        pairChecks += pairCount;
         resolveBubbleWalls(items, bounds);
       }
     }
@@ -664,25 +859,35 @@ function animateBubblePhysics(items, bounds, { minDuration, maxDuration }) {
     for (const item of items) {
       item.scale += (item.targetScale - item.scale) * 0.18;
       maxScaleDelta = Math.max(maxScaleDelta, Math.abs(item.targetScale - item.scale));
-      item.vx *= 0.988;
-      item.vy *= 0.988;
+      item.vx *= 0.968;
+      item.vy *= 0.968;
+      if (Math.abs(item.vx) < 0.025) item.vx = 0;
+      if (Math.abs(item.vy) < 0.025) item.vy = 0;
       maxMotion = Math.max(maxMotion, Math.abs(item.vx) + Math.abs(item.vy));
       applyBubblePosition(item);
     }
 
     const elapsed = now - startedAt;
-    if (elapsed < maxDuration && (elapsed < minDuration || maxMotion > 0.07 || maxScaleDelta > 0.004)) {
+    Object.assign(bubblePhysicsStats, {
+      elapsedMs: Math.round(elapsed),
+      frames,
+      pairChecks,
+      running: true,
+    });
+
+    if (elapsed < maxDuration && (elapsed < minDuration || maxMotion > profile.motionThreshold || maxScaleDelta > 0.004)) {
       bubblePhysicsFrame = requestAnimationFrame(frame);
       return;
     }
 
-    for (let i = 0; i < 120; i += 1) {
-      integrateBubbles(items, bounds, 0.45);
+    for (let i = 0; i < profile.settleSteps; i += 1) {
+      integrateBubbles(items, bounds, 0.25);
       resolveBubbleCollisions(items);
+      pairChecks += pairCount;
       resolveBubbleWalls(items, bounds);
       for (const item of items) {
-        item.vx *= 0.86;
-        item.vy *= 0.86;
+        item.vx *= 0.72;
+        item.vy *= 0.72;
       }
     }
     for (const item of items) {
@@ -692,10 +897,55 @@ function animateBubblePhysics(items, bounds, { minDuration, maxDuration }) {
       applyBubblePosition(item);
     }
     groupsEl.dataset.bubblePhysics = "settled";
+    Object.assign(bubblePhysicsStats, {
+      elapsedMs: Math.round(performance.now() - startedAt),
+      frames,
+      pairChecks,
+      running: false,
+    });
+    publishBubblePhysicsStats();
     bubblePhysicsFrame = 0;
   }
 
   bubblePhysicsFrame = requestAnimationFrame(frame);
+}
+
+function bubblePhysicsProfile(count) {
+  if (count >= 24) {
+    return {
+      name: "dense",
+      substeps: 1,
+      collisionIterations: 3,
+      settleSteps: 82,
+      motionThreshold: 0.1,
+    };
+  }
+  if (count >= 14) {
+    return {
+      name: "medium",
+      substeps: 1,
+      collisionIterations: 3,
+      settleSteps: 96,
+      motionThreshold: 0.1,
+    };
+  }
+  return {
+    name: "light",
+    substeps: 2,
+    collisionIterations: 3,
+    settleSteps: 120,
+    motionThreshold: 0.07,
+  };
+}
+
+function publishBubblePhysicsStats() {
+  groupsEl.dataset.physicsProfile = bubblePhysicsStats.profile;
+  groupsEl.dataset.physicsItems = String(bubblePhysicsStats.itemCount);
+  groupsEl.dataset.physicsFrames = String(bubblePhysicsStats.frames);
+  groupsEl.dataset.physicsPairChecks = String(bubblePhysicsStats.pairChecks);
+  groupsEl.dataset.physicsElapsed = String(bubblePhysicsStats.elapsedMs);
+  groupsEl.dataset.physicsPairChecksPerFrame = String(bubblePhysicsStats.estimatedPairChecksPerFrame);
+  groupsEl.dataset.physicsRunning = String(bubblePhysicsStats.running);
 }
 
 function integrateBubbles(items, bounds, dt) {
@@ -704,7 +954,7 @@ function integrateBubbles(items, bounds, dt) {
     const dx = center.x - item.x;
     const dy = center.y - item.y;
     const distance = Math.hypot(dx, dy) || 1;
-    const pull = clamp(0.06, distance * 0.0034, 1.05);
+    const pull = clamp(0.04, distance * 0.0022, 0.72);
     item.vx += (dx / distance) * pull * dt;
     item.vy += (dy / distance) * pull * dt;
     item.x += item.vx * dt;
@@ -713,7 +963,7 @@ function integrateBubbles(items, bounds, dt) {
 }
 
 function resolveBubbleWalls(items, bounds) {
-  const restitution = 0.42;
+  const restitution = 0.18;
   for (const item of items) {
     const radius = physicsRadius(item);
     if (item.x - radius < bounds.left) {
@@ -734,7 +984,7 @@ function resolveBubbleWalls(items, bounds) {
 }
 
 function resolveBubbleCollisions(items) {
-  const restitution = 0.34;
+  const restitution = 0.08;
   for (let i = 0; i < items.length; i += 1) {
     for (let j = i + 1; j < items.length; j += 1) {
       const a = items[i];
@@ -752,7 +1002,7 @@ function resolveBubbleCollisions(items) {
       const invA = 1 / a.mass;
       const invB = 1 / b.mass;
       const invTotal = invA + invB;
-      const correction = (overlap / invTotal) * 0.86;
+      const correction = (Math.max(0, overlap - 0.35) / invTotal) * 0.66;
       a.x -= nx * correction * invA;
       a.y -= ny * correction * invA;
       b.x += nx * correction * invB;
@@ -807,19 +1057,80 @@ function bindBubblePhysicsInteractions(items) {
     el.addEventListener("pointerenter", () => {
       const current = bubblePhysicsItems.find((candidate) => candidate.el === el);
       if (!current) return;
-      current.targetScale = 1.22;
+      current.targetScale = 1.18;
       el.classList.add("is-expanded");
-      nudgeBubblesFrom(current, bubblePhysicsItems, 4.2);
-      startBubblePhysicsLoop({ minDuration: 900, maxDuration: 3600 });
+      nudgeBubblesFrom(current, bubblePhysicsItems, 2.8);
+      scrollBubbleIntoFocus(el);
+      startBubblePhysicsLoop({ minDuration: 420, maxDuration: 1600 });
     });
     el.addEventListener("pointerleave", () => {
       const current = bubblePhysicsItems.find((candidate) => candidate.el === el);
       if (!current) return;
       current.targetScale = 1;
       el.classList.remove("is-expanded");
-      startBubblePhysicsLoop({ minDuration: 900, maxDuration: 2800 });
+      cancelBubbleFocusScroll();
+      startBubblePhysicsLoop({ minDuration: 360, maxDuration: 1300 });
     });
   }
+}
+
+function scrollBubbleIntoFocus(el) {
+  const scroller = el.closest(".results-page");
+  if (!scroller || scroller.scrollHeight <= scroller.clientHeight + 4) return;
+  const scrollerRect = scroller.getBoundingClientRect();
+  const rect = el.getBoundingClientRect();
+  const centerY = rect.top + rect.height / 2;
+  const focusTop = scrollerRect.top + scrollerRect.height * 0.28;
+  const focusBottom = scrollerRect.bottom - scrollerRect.height * 0.28;
+  if (centerY >= focusTop && centerY <= focusBottom) return;
+
+  const focusCenter = scrollerRect.top + scrollerRect.height * 0.5;
+  const delta = (centerY - focusCenter) * 0.42;
+  const maxStep = Math.max(140, scrollerRect.height * 0.26);
+  const target = clamp(
+    0,
+    scroller.scrollTop + clamp(-maxStep, delta, maxStep),
+    scroller.scrollHeight - scroller.clientHeight,
+  );
+  const distance = Math.abs(target - scroller.scrollTop);
+  if (distance < 16) return;
+  animateBubbleFocusScroll(scroller, target, 950 + Math.min(850, distance * 1.4));
+}
+
+function animateBubbleFocusScroll(scroller, target, duration) {
+  cancelBubbleFocusScroll();
+  bubbleFocusScrollTarget = scroller;
+  bubbleFocusScrollStartedAt = performance.now();
+  bubbleFocusScrollFrom = scroller.scrollTop;
+  bubbleFocusScrollTo = target;
+  bubbleFocusScrollDuration = duration;
+
+  function step(now) {
+    if (!bubbleFocusScrollTarget) return;
+    const elapsed = now - bubbleFocusScrollStartedAt;
+    const progress = clamp(0, elapsed / bubbleFocusScrollDuration, 1);
+    const eased = easeInOutCubic(progress);
+    bubbleFocusScrollTarget.scrollTop = bubbleFocusScrollFrom + (bubbleFocusScrollTo - bubbleFocusScrollFrom) * eased;
+    if (progress < 1) {
+      bubbleFocusScrollFrame = requestAnimationFrame(step);
+    } else {
+      cancelBubbleFocusScroll();
+    }
+  }
+
+  bubbleFocusScrollFrame = requestAnimationFrame(step);
+}
+
+function cancelBubbleFocusScroll() {
+  if (bubbleFocusScrollFrame) {
+    cancelAnimationFrame(bubbleFocusScrollFrame);
+    bubbleFocusScrollFrame = 0;
+  }
+  bubbleFocusScrollTarget = null;
+}
+
+function easeInOutCubic(value) {
+  return value < 0.5 ? 4 * value * value * value : 1 - ((-2 * value + 2) ** 3) / 2;
 }
 
 function nudgeBubblesFrom(source, items, force) {
