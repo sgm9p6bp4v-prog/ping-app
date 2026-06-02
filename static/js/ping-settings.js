@@ -24,7 +24,7 @@ export function initPingSettings() {
   const packetsInput = document.getElementById("hero-packets");
   if (!intervalInput || !packetsInput) return;
 
-  const defaults = { interval: 1, packets: 1 };
+  const defaults = { interval: 1, packets: 10 };
   intervalInput.value = defaults.interval;
   packetsInput.value = defaults.packets;
   localStorage.setItem(INTERVAL_KEY, defaults.interval);
@@ -98,7 +98,8 @@ async function applyIntervalToHosts(input) {
 
 function fitHeroInput(input) {
   const value = String(input.value || input.placeholder || "1");
-  input.style.setProperty("--input-ch", String(Math.max(1, value.length)));
+  const width = value === PACKET_INFINITY ? 2.2 : Math.max(1, value.length);
+  input.style.setProperty("--input-ch", String(width));
 }
 
 function parsePacketLimit(value) {

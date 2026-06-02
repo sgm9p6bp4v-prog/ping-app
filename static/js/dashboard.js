@@ -8,6 +8,7 @@ import { open as openDrill } from "./drilldown.js";
 
 const groupsEl = document.getElementById("groups");
 const overallEl = document.getElementById("overall-status");
+const heroStartControlEl = document.getElementById("hero-start-control");
 const metricActiveHostsEl = document.getElementById("metric-active-hosts");
 const metricAvgRttEl = document.getElementById("metric-avg-rtt");
 const metricPacketsTotalEl = document.getElementById("metric-packets-total");
@@ -129,6 +130,7 @@ function renderIpList() {
     <section class="group group--all" data-group="__ip_view__"
              data-count="${hosts.length}" data-bubble-span="6" style="${style}">
       <header class="group__head">
+        ${groupTitleArcHtml(t("view.ip_title"), "ip-view", 6)}
         <h2 class="group__name">${escapeHtml(t("view.ip_title"))}</h2>
       </header>
       <div class="host-grid host-grid--all">${hosts.map(hostCardHtml).join("")}</div>
@@ -160,8 +162,14 @@ function renderKpis() {
   let status = "online";
   if (c.offline > 0 && c.offline === c.total) status = "offline";
   else if (c.offline > 0) status = "degraded";
-  overallEl.dataset.status = status;
-  overallEl.textContent = t(`header.${status}`);
+  if (overallEl) {
+    overallEl.dataset.status = status;
+    overallEl.textContent = t(`header.${status}`);
+  }
+  if (heroStartControlEl) {
+    heroStartControlEl.dataset.status = status;
+    heroStartControlEl.setAttribute("aria-label", `Network status: ${t(`header.${status}`)}`);
+  }
   renderDashboardMetrics(c);
 }
 
@@ -257,7 +265,8 @@ function renderGroups() {
   const html = [];
   const packedGroups = packBubbleGroups(grouped);
   groupsEl.style.setProperty("--bubble-grid-rows", String(packedGroups.rows));
-  for (const item of packedGroups.items) {
+  for (let titleIndex = 0; titleIndex < packedGroups.items.length; titleIndex += 1) {
+    const item = packedGroups.items[titleIndex];
     const { groupName, hosts, style } = item;
     const gstate = Store.groupState(groupName);
     const collapsed = gstate.collapsed;
@@ -271,6 +280,7 @@ function renderGroups() {
                data-tooltip="${escapeAttr(t("group.context_hint"))}"
                style="${style}">
         <header class="group__head">
+          ${groupTitleArcHtml(groupName, `group-${titleIndex}`, item.span)}
           <button class="group__collapse" data-group-action="collapse"
                   aria-label="${escapeAttr(t("group.collapse"))}"
                   aria-expanded="${!collapsed}">${collapsed ? "▶" : "▼"}</button>
@@ -340,9 +350,105 @@ window.addEventListener("resize", () => {
   }
 });
 
+function groupTitleArcHtml(groupName, idSeed, span) {
+  const pathId = `group-title-curve-${idSeed}`;
+  return `
+    <svg class="group__title-arc" viewBox="0 0 240 240"
+         data-group-title-display="true" aria-hidden="true" focusable="false">
+      <path class="group__title-path" id="${escapeAttr(pathId)}"
+            d="M 38 170 A 96 96 0 1 1 202 170"></path>
+      <text class="group__title-text" style="${groupTitleStyle(groupName, span)}"${groupTitleLengthAttrs(groupName, span)}>
+        <textPath class="group__title-text-path" href="#${escapeAttr(pathId)}"
+                  startOffset="50%" text-anchor="middle">${escapeHtml(groupName)}</textPath>
+      </text>
+    </svg>
+  `;
+}
+
+function groupTitleStyle(groupName, span) {
+  const length = groupName.trim().replace(/\s+/g, " ").length;
+  const base = 8 + span * 4.2;
+  const boost = length >= 34 ? span * 6 : length >= 22 ? span * 3.2 : length >= 14 ? span * 1.1 : 0;
+  const size = Math.round(clamp(13, base + boost, 62));
+  const spacing = length >= 34 ? "-0.015em" : length >= 20 ? "0" : "0.01em";
+  return `--group-title-size:${size}px;--group-title-spacing:${spacing}`;
+}
+
+function groupTitleLengthAttrs(groupName, span) {
+  const target = groupTitleTextLength(groupName, span);
+  return target ? ` textLength="${target}" lengthAdjust="spacingAndGlyphs"` : "";
+}
+
+function groupTitleTextLength(groupName, span) {
+  const length = groupName.trim().replace(/\s+/g, " ").length;
+  const threshold = span >= 4 ? 18 : 18;
+  if (length <= threshold) return null;
+  const maxLength = span >= 4 ? 430 : span >= 3 ? 300 : 170;
+  if (length > threshold + 28) return maxLength;
+  if (length > threshold + 16) return Math.round(maxLength * 0.82);
+  if (length > threshold + 8) return Math.round(maxLength * 0.68);
+  return Math.round(maxLength * 0.55);
+}
+
+function syncGroupTitleDisplay(el) {
+  const section = el.closest(".group");
+  const titlePath = section?.querySelector(".group__title-text-path");
+  const titleText = section?.querySelector(".group__title-text");
+  if (!section || !titlePath || !titleText) return;
+  const title = el.textContent.trim() || section.dataset.group;
+  titlePath.textContent = title;
+  const target = groupTitleTextLength(title, Number(section.dataset.bubbleSpan) || 2);
+  titleText.setAttribute("style", groupTitleStyle(title, Number(section.dataset.bubbleSpan) || 2));
+  if (target) {
+    titleText.setAttribute("textLength", String(target));
+    titleText.setAttribute("lengthAdjust", "spacingAndGlyphs");
+  } else {
+    titleText.removeAttribute("textLength");
+    titleText.removeAttribute("lengthAdjust");
+  }
+}
+
+function selectEditableText(el) {
+  const range = document.createRange();
+  range.selectNodeContents(el);
+  const selection = window.getSelection();
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+
+function focusGroupName(section) {
+  const name = section?.querySelector(".group__name[contenteditable]");
+  if (!section || !name) return;
+  section.classList.add("is-editing");
+  name.focus();
+  selectEditableText(name);
+}
+
 function attachGroupNameHandlers() {
+  groupsEl.querySelectorAll(".group[data-group]").forEach((section) => {
+    section.addEventListener("click", (ev) => {
+      if (ev.target.closest?.("[data-host-id], button, .host-card")) return;
+      const rect = section.getBoundingClientRect();
+      if (ev.clientY - rect.top > rect.height * 0.34) return;
+      ev.stopPropagation();
+      focusGroupName(section);
+    });
+  });
+
+  groupsEl.querySelectorAll("[data-group-title-display]").forEach((display) => {
+    display.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      const section = display.closest(".group");
+      focusGroupName(section);
+    });
+  });
+
   groupsEl.querySelectorAll(".group__name[contenteditable]").forEach((el) => {
     el.dataset.originalName = el.textContent.trim();
+    el.addEventListener("focus", () => {
+      el.closest(".group")?.classList.add("is-editing");
+    });
+    el.addEventListener("input", () => syncGroupTitleDisplay(el));
     el.addEventListener("keydown", (ev) => {
       if (ev.key === "Enter") {
         ev.preventDefault();
@@ -350,15 +456,18 @@ function attachGroupNameHandlers() {
       } else if (ev.key === "Escape") {
         ev.preventDefault();
         el.textContent = el.dataset.originalName;
+        syncGroupTitleDisplay(el);
         el.blur();
       }
     });
     el.addEventListener("blur", async () => {
       const section = el.closest(".group");
+      section?.classList.remove("is-editing");
       const oldName = section.dataset.group;
       const newName = el.textContent.trim();
       if (!newName || newName === oldName) {
         el.textContent = oldName;
+        syncGroupTitleDisplay(el);
         return;
       }
       try {
@@ -372,6 +481,7 @@ function attachGroupNameHandlers() {
       } catch (e) {
         console.warn("group rename failed", e);
         el.textContent = oldName;
+        syncGroupTitleDisplay(el);
         alert(e.message || "Could not rename group");
       }
     });
@@ -775,11 +885,11 @@ function syncHostSizing(item) {
   item.el.style.setProperty("--host-name-size", `${clamp(7, detailSize * 0.13, 13).toFixed(1)}px`);
   item.el.style.setProperty("--host-rtt-size", `${clamp(6, detailSize * 0.11, 12).toFixed(1)}px`);
   if (hostCount >= 8) {
-    item.el.style.setProperty("--host-grid-top", "30%");
-    item.el.style.setProperty("--host-grid-hover-top", "32%");
+    item.el.style.setProperty("--host-grid-top", "34%");
+    item.el.style.setProperty("--host-grid-hover-top", "36%");
   } else if (hostCount >= 4) {
-    item.el.style.setProperty("--host-grid-top", "36%");
-    item.el.style.setProperty("--host-grid-hover-top", "38%");
+    item.el.style.setProperty("--host-grid-top", "40%");
+    item.el.style.setProperty("--host-grid-hover-top", "42%");
   } else if (hostCount >= 2) {
     item.el.style.setProperty("--host-grid-top", "48%");
     item.el.style.setProperty("--host-grid-hover-top", "49%");

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>ping.me</title>
   <link rel="stylesheet" href="/css/app.css" />
-  <link rel="stylesheet" href="/css/readymag-overrides.css?v=large-bubbles-17" />
+  <link rel="stylesheet" href="/css/readymag-overrides.css?v=hero-dashboard-polish-1" />
   <link rel="icon" href="data:," />
 </head>
 <body>
@@ -17,9 +17,16 @@
     <main class="deck-main" id="deck-main" data-page="0">
       <div class="deck-track" id="deck-track">
       <section class="hero deck-page">
-        <div class="monitoring-control hero__start-control">
+        <div class="monitoring-control hero__start-control" id="hero-start-control" data-status="online">
+          <svg class="hero__status-ring" viewBox="0 0 240 240" aria-hidden="true" focusable="false">
+            <circle class="hero__status-ring-circle" cx="120" cy="120" r="105"></circle>
+            <path id="hero-status-curve" d="M 32 176 A 106 106 0 0 0 208 176"></path>
+            <text class="hero__status-ring-label">
+              <textPath id="overall-status" href="#hero-status-curve" startOffset="50%" text-anchor="middle" data-status="online" data-i18n="header.online">ONLINE</textPath>
+            </text>
+          </svg>
           <button id="monitoring-toggle" data-state="paused">START</button>
-          <div class="monitoring-status">
+          <div class="monitoring-status" aria-hidden="true">
             <span id="monitoring-state" data-i18n="monitor.paused">PAUSED</span>
             <span id="monitoring-countdown"></span>
           </div>
@@ -28,7 +35,7 @@
           <h1 class="hero__sentence">
             <span class="hero__line"><span class="hero__wordmark" aria-label="ping.me">p<span class="hero__i">ı<span class="hero__i-accent" aria-hidden="true"></span></span>ng<span class="hero__dot" aria-hidden="true"></span>me</span> every</span>
             <span class="hero__line"><input id="hero-interval" class="hero__input" type="text" inputmode="decimal" value="1" autocomplete="off" aria-label="Ping interval in seconds" /> seconds and</span>
-            <span class="hero__line">send <input id="hero-packets" class="hero__input" type="text" inputmode="numeric" value="1" autocomplete="off" aria-label="Packets per host" /> packets</span>
+            <span class="hero__line">send <input id="hero-packets" class="hero__input" type="text" inputmode="numeric" value="10" autocomplete="off" aria-label="Packets per host" /> packets</span>
             <span class="hero__line"><span class="hero__phrase">to the host<span class="hero__dot" aria-hidden="true"></span></span></span>
           </h1>
           <div class="hero__hostline">
@@ -40,7 +47,6 @@
             <div class="hero__interface-menu" id="hero-interface-menu" role="listbox" hidden></div>
           </div>
           <div class="hero__controls">
-            <div class="hero__status" id="overall-status" data-status="online" data-i18n="header.online">ONLINE</div>
             <div class="theme-switch" aria-label="Theme">
               <button id="theme-light" data-i18n="theme.light" aria-pressed="true">Light</button>
               <button id="theme-dark" data-i18n="theme.dark" aria-pressed="false">Dark</button>
@@ -131,6 +137,6 @@
   </div>
 
   <script src="/vendor/chart.umd.min.js"></script>
-  <script type="module" src="/js/app.js?v=large-bubbles-17"></script>
+  <script type="module" src="/js/app.js?v=hero-dashboard-polish-1"></script>
 </body>
 </html>
