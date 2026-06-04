@@ -8,10 +8,18 @@ export function initDesignExamples() {
 
   let wheelBoundaryDirection = 0;
   let wheelBoundaryReadyAt = 0;
+  let wheelBoundaryTimer = 0;
   const wheelBoundaryDelayMs = 520;
   const wheelBoundaryWindowMs = 4200;
 
+  function clearWheelBoundaryTimer() {
+    if (!wheelBoundaryTimer) return;
+    window.clearTimeout(wheelBoundaryTimer);
+    wheelBoundaryTimer = 0;
+  }
+
   function resetWheelBoundary() {
+    clearWheelBoundaryTimer();
     wheelBoundaryDirection = 0;
     wheelBoundaryReadyAt = 0;
   }
@@ -21,12 +29,57 @@ export function initDesignExamples() {
     main.dataset.page = String(page);
   }
 
+  function isTextEditingTarget(target) {
+    if (!(target instanceof Element)) return false;
+    const tagName = target.tagName.toLowerCase();
+    return target.isContentEditable
+      || Boolean(target.closest("[contenteditable='true'], [contenteditable='plaintext-only'], [role='textbox']"))
+      || tagName === "input"
+      || tagName === "textarea"
+      || tagName === "select";
+  }
+
+  function canTurnFromResultsBoundary(direction, results) {
+    if (!results || results.scrollHeight <= results.clientHeight + 4) return true;
+    const maxScroll = results.scrollHeight - results.clientHeight;
+    return direction < 0 ? results.scrollTop <= 2 : results.scrollTop >= maxScroll - 2;
+  }
+
+  function setPageFromWheel(direction) {
+    const page = Number(main.dataset.page || "0");
+    setPage(Math.max(0, Math.min(2, page + direction)));
+  }
+
+  function armWheelBoundary(direction) {
+    const now = performance.now();
+    const stillArmed = wheelBoundaryDirection === direction
+      && now <= wheelBoundaryReadyAt + wheelBoundaryWindowMs;
+    if (!stillArmed) {
+      clearWheelBoundaryTimer();
+      wheelBoundaryDirection = direction;
+      wheelBoundaryReadyAt = now + wheelBoundaryDelayMs;
+      wheelBoundaryTimer = window.setTimeout(() => {
+        wheelBoundaryTimer = 0;
+        if (wheelBoundaryDirection !== direction) return;
+        const page = Number(main.dataset.page || "0");
+        const results = document.getElementById("results-page");
+        if (page === 1 && canTurnFromResultsBoundary(direction, results)) {
+          setPageFromWheel(direction);
+        }
+      }, wheelBoundaryDelayMs);
+      return false;
+    }
+    return now >= wheelBoundaryReadyAt;
+  }
+
   next?.addEventListener("click", () => setPage(1));
   back?.addEventListener("click", () => setPage(0));
   dashboardNext?.addEventListener("click", () => setPage(2));
   dashboardBack?.addEventListener("click", () => setPage(1));
 
   window.addEventListener("keydown", (event) => {
+    if (event.defaultPrevented || isTextEditingTarget(event.target)) return;
+    if (event.altKey || event.ctrlKey || event.metaKey) return;
     const page = Number(main.dataset.page || "0");
     if (event.key === "ArrowRight") setPage(Math.min(2, page + 1));
     if (event.key === "ArrowLeft") setPage(Math.max(0, page - 1));
@@ -54,17 +107,10 @@ export function initDesignExamples() {
     event.preventDefault();
 
     if (page === 1 && mostlyVertical) {
-      const now = performance.now();
-      const armed = wheelBoundaryDirection === direction
-        && now >= wheelBoundaryReadyAt
-        && now <= wheelBoundaryReadyAt + wheelBoundaryWindowMs;
-      if (!armed) {
-        wheelBoundaryDirection = direction;
-        wheelBoundaryReadyAt = now + wheelBoundaryDelayMs;
-        return;
-      }
+      if (!armWheelBoundary(direction)) return;
+      clearWheelBoundaryTimer();
     }
 
-    setPage(Math.max(0, Math.min(2, page + direction)));
+    setPageFromWheel(direction);
   }, { passive: false });
 }

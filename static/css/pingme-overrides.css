@@ -4,7 +4,7 @@
   --rm-blue: #3e58d1;
   --rm-green: #00b80f;
   --rm-red: #ff4b3a;
-  --rm-white: #ffffff;
+  --rm-white: #f9fafb;
 }
 
 .hero {
@@ -333,7 +333,7 @@
 
 .result-tile span,
 .result-tile small {
-  color: rgba(255, 255, 255, 0.95);
+  color: rgba(249, 250, 251, 0.95);
   font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
   font-size: clamp(12px, 1.35vw, 16px);
   font-weight: 400;
@@ -383,7 +383,7 @@
   bottom: 50px;
   width: 24px;
   border-left: 2px solid rgba(32, 32, 32, 0.36);
-  color: rgba(255, 255, 255, 0.74);
+  color: rgba(249, 250, 251, 0.74);
   font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
   font-size: 10px;
   font-weight: 400;
@@ -474,7 +474,7 @@
   transform: none;
 }
 
-/* ---- Readymag calendar-style host map ------------------------------------- */
+/* ---- Calendar-style host map ---------------------------------------------- */
 
 .results-page {
   --results-top: clamp(118px, 16vh, 172px);
@@ -675,7 +675,7 @@
 
 .results-page .host-card__addr,
 .results-page .host-card__status {
-  color: rgba(255, 255, 255, 0.84);
+  color: rgba(249, 250, 251, 0.84);
   font-size: clamp(9px, 1vw, 12px);
 }
 
@@ -686,7 +686,7 @@
 }
 
 .results-page .host-card__rtt small {
-  color: rgba(255, 255, 255, 0.84) !important;
+  color: rgba(249, 250, 251, 0.84) !important;
 }
 
 /* ---- Page 1 layout studies ------------------------------------------------ */
@@ -733,7 +733,7 @@
 .results-page .groups[data-layout="lanes"] .group__meta {
   display: block;
   grid-column: 1 / -1;
-  color: rgba(255, 255, 255, 0.9);
+  color: rgba(249, 250, 251, 0.9);
   font-family: "Roboto", "Inter", system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
   font-size: clamp(11px, 1vw, 14px);
 }
@@ -817,7 +817,7 @@
 .results-page .groups[data-layout="mosaic"] .group__meta {
   display: block;
   grid-column: 1;
-  color: rgba(255, 255, 255, 0.88);
+  color: rgba(249, 250, 251, 0.88);
   font-family: "Roboto", "Inter", system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
   font-size: clamp(10px, 0.9vw, 13px);
 }
@@ -1040,23 +1040,23 @@
 }
 
 .deck-main[data-page="1"] + .fab {
-  background: #ffffff;
+  background: #f9fafb;
   color: #202020;
 }
 
 .results-page .page-back,
 .results-page .page-next {
-  color: #ffffff;
+  color: #f9fafb;
 }
 
 .results-page .view-toggle button {
-  background: rgba(255, 255, 255, 0.86);
+  background: rgba(249, 250, 251, 0.86);
   color: #202020;
 }
 
 .results-page .view-toggle button[aria-pressed="true"] {
   background: #202020;
-  color: #ffffff;
+  color: #f9fafb;
 }
 
 .results-page .groups[data-layout="bubbles"] {
@@ -1092,11 +1092,11 @@
   display: block;
   border: 0;
   border-radius: 9999px;
-  background: #ffffff;
+  background: #f9fafb;
   isolation: isolate;
   overflow: hidden;
   box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.3),
+    inset 0 0 0 1px rgba(249, 250, 251, 0.3),
     0 24px 64px rgba(20, 31, 83, 0.24);
   opacity: 1;
   transform-origin: center;
@@ -1142,7 +1142,7 @@
 .results-page .groups[data-layout="bubbles"] .group.is-expanded {
   z-index: 20;
   box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.4),
+    inset 0 0 0 1px rgba(249, 250, 251, 0.4),
     0 40px 98px rgba(8, 15, 62, 0.36);
 }
 
@@ -1169,7 +1169,7 @@
   padding: 8px 12px;
   border-radius: 999px;
   background: #202020;
-  color: #ffffff;
+  color: #f9fafb;
   font-family: "Roboto", Arial, sans-serif;
   font-size: 11px;
   font-weight: 400;
@@ -1192,7 +1192,7 @@
 }
 
 .results-page .groups[data-layout="bubbles"] .group[data-enabled="false"]::after {
-  background: #ffffff;
+  background: #f9fafb;
   color: #202020;
 }
 
@@ -1209,7 +1209,7 @@
   padding: 8px 12px;
   border-radius: 999px;
   background: #202020;
-  color: #ffffff;
+  color: #f9fafb;
   font-family: "Roboto", Arial, sans-serif;
   font-size: 11px;
   font-weight: 400;
@@ -1220,7 +1220,7 @@
 }
 
 .bubble-tooltip[data-theme="light"] {
-  background: #ffffff;
+  background: #f9fafb;
   color: #202020;
 }
 
@@ -1282,7 +1282,7 @@
 }
 
 .results-page .groups[data-layout="bubbles"] .group[data-enabled="false"] .group__title-text {
-  fill: #ffffff;
+  fill: #f9fafb;
 }
 
 .results-page .groups[data-layout="bubbles"] .group__name {
@@ -1330,11 +1330,11 @@
 }
 
 .results-page .groups[data-layout="bubbles"] .group[data-enabled="false"] .group__name {
-  color: #ffffff;
+  color: #f9fafb;
 }
 
 .results-page .groups[data-layout="bubbles"] .group[data-enabled="false"] .group__name:focus {
-  color: #ffffff;
+  color: #f9fafb;
 }
 
 .results-page .groups[data-layout="bubbles"] .group__toggle,
@@ -1370,7 +1370,7 @@
 }
 
 .results-page .groups[data-layout="bubbles"] .group[data-enabled="false"] .group__delete {
-  color: #ffffff;
+  color: #f9fafb;
 }
 
 .results-page .groups[data-layout="bubbles"] .group__delete::after {
@@ -1430,7 +1430,7 @@
   border: 0;
   border-radius: 999px;
   background: #202020;
-  color: #ffffff;
+  color: #f9fafb;
   overflow: visible;
   text-decoration: none;
   display: grid;
@@ -1438,7 +1438,7 @@
   text-align: center;
   position: relative;
   transform: none;
-  color: #ffffff !important;
+  color: #f9fafb !important;
   text-align: center !important;
   transition:
     width 280ms cubic-bezier(.2, .9, .2, 1),
@@ -1469,7 +1469,7 @@
 .results-page .groups[data-layout="bubbles"] .group[data-enabled="false"] .host-card[data-status="slow"],
 .results-page .groups[data-layout="bubbles"] .group[data-enabled="false"] .host-card[data-status="offline"],
 .results-page .groups[data-layout="bubbles"] .group[data-enabled="false"] .host-card[data-status="idle"] {
-  background: #ffffff;
+  background: #f9fafb;
   color: #202020 !important;
 }
 
@@ -1485,7 +1485,7 @@
   z-index: 4;
   transform: scale(1.14);
   box-shadow: 0 12px 28px rgba(8, 15, 62, 0.24);
-  color: #ffffff !important;
+  color: #f9fafb !important;
 }
 
 .results-page .groups[data-layout="bubbles"] .host-card__detail {
@@ -1519,7 +1519,7 @@
 }
 
 .results-page .groups[data-layout="bubbles"] .host-card__name {
-  color: #ffffff;
+  color: #f9fafb;
   font-family: "Roboto", Arial, sans-serif;
   font-size: var(--host-name-size, clamp(9px, 0.85vw, 13px));
   font-weight: 400;
@@ -1537,11 +1537,11 @@
   word-break: normal;
   hyphens: none;
   text-wrap: balance;
-  color: #ffffff !important;
+  color: #f9fafb !important;
 }
 
 .results-page .groups[data-layout="bubbles"] .host-card:hover .host-card__name {
-  color: #ffffff !important;
+  color: #f9fafb !important;
 }
 
 .results-page .groups[data-layout="bubbles"] .group[data-enabled="false"] .host-card__name,
@@ -1562,7 +1562,7 @@
   display: flex !important;
   justify-content: center;
   align-items: center;
-  color: rgba(255, 255, 255, 0.86);
+  color: rgba(249, 250, 251, 0.86);
   font-family: "Roboto", Arial, sans-serif;
   font-size: var(--host-rtt-size, clamp(8px, 0.78vw, 12px));
   font-weight: 400;
@@ -1571,11 +1571,11 @@
   justify-self: center;
   width: 100%;
   text-align: center !important;
-  color: rgba(255, 255, 255, 0.86) !important;
+  color: rgba(249, 250, 251, 0.86) !important;
 }
 
 .results-page .groups[data-layout="bubbles"] .host-card:hover .host-card__rtt {
-  color: rgba(255, 255, 255, 0.86) !important;
+  color: rgba(249, 250, 251, 0.86) !important;
 }
 
 .results-page .groups[data-layout="bubbles"] .group[data-enabled="false"] .host-card__rtt,
@@ -1666,7 +1666,7 @@
   z-index: 5;
   display: none;
   gap: clamp(24px, 3.5vw, 48px);
-  color: rgba(255, 255, 255, 0.66);
+  color: rgba(249, 250, 251, 0.66);
   font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
   font-size: 9px;
   font-weight: 400;

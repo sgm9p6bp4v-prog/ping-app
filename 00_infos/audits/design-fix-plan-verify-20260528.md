@@ -14,7 +14,7 @@
 | P0-6 PAUSE/RESUME | ja | Fix | OK, hardcoded `dashboard.js:207`; Keys existieren `en.json:14-15`, `it.json:14-15`. |
 | P0-7 `?v=` Module | ja | Fix | OK, Queries real `app.js:13-20`, `dashboard.js:7`, `monitoring.js:9`, `index.html:7-8,129`. |
 | P0-8 unknown group 404 | ja | Non-defect | OK, `update_group()` ohne Sets returned `get_group()`, `store.py:315-316`; 404 in `api.py:291-292`. |
-| P1-A CSS Dual Debt | ja | HOLD | Richtig verschoben; Umfang real `app.css` 2535 Z., `readymag-overrides.css` 633 Z.; Kollisionen z.B. `app.css:87`, `readymag-overrides.css:8`. |
+| P1-A CSS Dual Debt | ja | HOLD | Richtig verschoben; Umfang real `app.css` 2535 Z., `pingme-overrides.css` 633 Z.; Kollisionen z.B. `app.css:87`, `pingme-overrides.css:8`. |
 | P1-B inline onclick | ja | Fix | OK, vier Inline-Handler `index.html:45,49,50,67`; JS-Handler existieren `design-examples.js:13-16`. |
 | P1-B wheel hijack | ja | HOLD | Richtig, real `design-examples.js:24-30`. |
 | P1-C ping-settings race | ja | Fix/HOLD-Konflikt | Race real `ping-settings.js:72-82`; Persistenzfrage kollidiert mit HOLD-4. |

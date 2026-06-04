@@ -114,8 +114,8 @@ Quelle: `00_infos/untitled.pen` — Editorial Dashboard. Das ist die einzige Des
 ### Variablen (aus Pencil-File)
 | Token | Wert | Verwendung |
 |-------|------|------------|
-| `--bg` | `#FFFFFF` (light) / `#000000` (dark) | Background |
-| `--fg` | `#000000` (light) / `#FFFFFF` (dark) | Vordergrund-Text |
+| `--bg` | `#f9fafb` (light) / `#000000` (dark) | Background |
+| `--fg` | `#000000` (light) / `#f9fafb` (dark) | Vordergrund-Text |
 | `--hairline` | `#EBEBEB` (light) / `#1C1C1C` (dark) | Trennlinien (1px) |
 | `--muted` | `#9A9A9A` / `#6A6A6A` | Sekundaer-Text |
 | `--selection` | invertiert | Auswahl/Hover |

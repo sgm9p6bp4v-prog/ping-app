@@ -28,13 +28,13 @@
   src: url("/vendor/inter/Inter-Black.woff2") format("woff2");
 }
 
-/* ---- Readymag pitch sequence --------------------------------------------- */
+/* ---- Pitch sequence ------------------------------------------------------- */
 
 :root {
   --rm-dark: #202020;
   --rm-grey: #9d9d9d;
   --rm-blue: #3a58d3;
-  --rm-white: #ffffff;
+  --rm-white: #f9fafb;
   --rm-red: #f74c3a;
   --rm-red-soft: #f6c2bc;
   --rm-green: #03aa1e;
@@ -47,8 +47,8 @@
   --bg: var(--rm-grey);
   --paper: var(--rm-grey);
   --fg: var(--rm-dark);
-  --hairline: rgba(255, 255, 255, 0.44);
-  --muted: rgba(255, 255, 255, 0.82);
+  --hairline: rgba(249, 250, 251, 0.44);
+  --muted: rgba(249, 250, 251, 0.82);
   --accent: var(--rm-dark);
   --accent-2: var(--rm-white);
   --danger: var(--rm-red);
@@ -262,7 +262,7 @@
 .results-page .group__head {
   top: 0;
   background: transparent;
-  border-color: rgba(255, 255, 255, 0.48);
+  border-color: rgba(249, 250, 251, 0.48);
 }
 
 .results-page .group__name,
@@ -283,16 +283,16 @@
 .results-page .suggestion__addr,
 .results-page .suggestion__arrow,
 .results-page .suggestion__current {
-  color: rgba(255, 255, 255, 0.78);
+  color: rgba(249, 250, 251, 0.78);
 }
 
 .results-page .host-grid {
-  border-color: rgba(255, 255, 255, 0.38);
+  border-color: rgba(249, 250, 251, 0.38);
 }
 
 .results-page .host-card {
-  border-color: rgba(255, 255, 255, 0.38);
-  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(249, 250, 251, 0.38);
+  background: rgba(249, 250, 251, 0.07);
   color: var(--rm-white);
 }
 
@@ -301,7 +301,7 @@
 }
 
 .results-page .host-card__rtt small {
-  color: rgba(255, 255, 255, 0.78) !important;
+  color: rgba(249, 250, 251, 0.78) !important;
 }
 
 .dashboard-page {
@@ -768,7 +768,7 @@
   --cursor-y: 40vh;
   --scroll-shift: 0px;
   --selection: #000000;
-  --selection-fg: #ffffff;
+  --selection-fg: #f9fafb;
 
   --font-primary: "Inter", system-ui, -apple-system, sans-serif;
   --font-display: "Inter", "Arial Black", "Helvetica Neue", Arial, sans-serif;
@@ -804,13 +804,13 @@
   --accent: #ffad00;
   --accent-2: #ff5d83;
   --danger: #ff321d;
-  --selection: #ffffff;
+  --selection: #f9fafb;
   --selection-fg: #000000;
 }
 
 [data-design="pitch"] {
-  --bg: #ffffff;
-  --paper: #ffffff;
+  --bg: #f9fafb;
+  --paper: #f9fafb;
   --fg: #282828;
   --hairline: #d6d6d6;
   --muted: #9d9d9d;
@@ -822,10 +822,10 @@
 [data-design="flow"] {
   --bg: #202020;
   --paper: #202020;
-  --fg: #ffffff;
+  --fg: #f9fafb;
   --hairline: #474747;
   --muted: #c0c0c0;
-  --accent: #ffffff;
+  --accent: #f9fafb;
   --accent-2: #03aa1e;
   --danger: #f74c3a;
 }
@@ -844,17 +844,17 @@
 [data-theme="dark"][data-design="pitch"] {
   --bg: #282828;
   --paper: #282828;
-  --fg: #ffffff;
+  --fg: #f9fafb;
   --hairline: #555555;
   --muted: #c0c0c0;
-  --accent: #ffffff;
+  --accent: #f9fafb;
   --accent-2: #3a58d3;
   --danger: #f84c38;
 }
 
 [data-theme="dark"][data-design="flow"] {
-  --bg: #ffffff;
-  --paper: #ffffff;
+  --bg: #f9fafb;
+  --paper: #f9fafb;
   --fg: #202020;
   --hairline: #d6d6d6;
   --muted: #717171;
@@ -1743,7 +1743,7 @@ body.has-pointer .motion-field__cursor {
 }
 
 [data-design="pitch"] .host-card {
-  background: #ffffff;
+  background: #f9fafb;
 }
 
 [data-design="flow"] .host-card {
@@ -2162,15 +2162,15 @@ body.has-pointer .motion-field__cursor {
   .app-footer > :nth-child(n+4) { display: none; }
 }
 
-/* ---- Readymag pitch sequence final overrides ------------------------------ */
+/* ---- Pitch sequence final overrides --------------------------------------- */
 
 [data-theme="light"],
 [data-theme="dark"] {
   --bg: var(--rm-grey);
   --paper: var(--rm-grey);
   --fg: var(--rm-dark);
-  --hairline: rgba(255, 255, 255, 0.44);
-  --muted: rgba(255, 255, 255, 0.82);
+  --hairline: rgba(249, 250, 251, 0.44);
+  --muted: rgba(249, 250, 251, 0.82);
   --accent: var(--rm-dark);
   --accent-2: var(--rm-white);
   --danger: var(--rm-red);
@@ -2371,7 +2371,7 @@ body.has-pointer .motion-field__cursor {
 .results-page .group__head {
   top: 0;
   background: transparent;
-  border-color: rgba(255, 255, 255, 0.48);
+  border-color: rgba(249, 250, 251, 0.48);
 }
 
 .results-page .group__name,
@@ -2392,16 +2392,16 @@ body.has-pointer .motion-field__cursor {
 .results-page .suggestion__addr,
 .results-page .suggestion__arrow,
 .results-page .suggestion__current {
-  color: rgba(255, 255, 255, 0.78);
+  color: rgba(249, 250, 251, 0.78);
 }
 
 .results-page .host-grid {
-  border-color: rgba(255, 255, 255, 0.38);
+  border-color: rgba(249, 250, 251, 0.38);
 }
 
 .results-page .host-card {
-  border-color: rgba(255, 255, 255, 0.38);
-  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(249, 250, 251, 0.38);
+  background: rgba(249, 250, 251, 0.07);
   color: var(--rm-white);
 }
 
@@ -2410,7 +2410,7 @@ body.has-pointer .motion-field__cursor {
 }
 
 .results-page .host-card__rtt small {
-  color: rgba(255, 255, 255, 0.78) !important;
+  color: rgba(249, 250, 251, 0.78) !important;
 }
 
 .dashboard-page {

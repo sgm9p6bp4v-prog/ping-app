@@ -3107,7 +3107,7 @@
       "type": "color",
       "value": [
         {
-          "value": "#FFFFFF",
+          "value": "#f9fafb",
           "theme": {
             "mode": "light"
           }
@@ -3130,7 +3130,7 @@
           }
         },
         {
-          "value": "#FFFFFF",
+          "value": "#f9fafb",
           "theme": {
             "mode": "dark"
           }
@@ -3229,7 +3229,7 @@
           }
         },
         {
-          "value": "#FFFFFF",
+          "value": "#f9fafb",
           "theme": {
             "mode": "dark"
           }
@@ -3240,7 +3240,7 @@
       "type": "color",
       "value": [
         {
-          "value": "#FFFFFF",
+          "value": "#f9fafb",
           "theme": {
             "mode": "light"
           }

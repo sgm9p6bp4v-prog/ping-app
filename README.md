@@ -1,127 +1,191 @@
-# ping.me Dashboard
+# ping.me
 
-Server-resident LAN ping dashboard. Monitors up to ~254 hosts (a /24 subnet)
-in real time. Runs **air-gapped** on a Linux server, accessed via HTTP from
-anywhere in the LAN. Editorial-brutalist UI (Inter, monochrome, hairline
-trennlinien — see `00_infos/untitled.pen`).
+`ping.me` is a server-hosted LAN ping monitor with a browser interface. It stores
+hosts and groups on the server, runs ping tests from the server network stack,
+and shows live results through an animated web UI.
 
-## Try it in 30 seconds (any Linux/macOS dev box)
+The app is meant for a machine inside the LAN: open it from a browser, add hosts,
+choose the ping interval and packet count, start the test, and inspect group,
+dashboard, and per-host latency views.
+
+## Quick Start
 
 ```bash
 git clone git@github.com:sgm9p6bp4v-prog/ping-app.git
 cd ping-app
 make install-dev
 make run
-# → open http://127.0.0.1:8000
 ```
 
-The server boots **PAUSED**. Click **START** in the header to begin pinging
-(it auto-stops after 30 min, countdown is visible). Click **+** bottom-right
-to add hosts.
+Open [http://127.0.0.1:8000](http://127.0.0.1:8000).
+
+The development server binds to `127.0.0.1`. For LAN access on a server, bind to
+`0.0.0.0` or use the systemd deployment described below.
+
+## How The Test Works
+
+The hero sentence controls the ping run:
+
+```text
+ping.me every x seconds and send y packets to the host.
+```
+
+- `x` is the interval, in seconds, between ping attempts for each active host.
+- `y` is the number of ping attempts per active host before the test stops.
+- The default values are `x = 1` and `y = 10`.
+- `y` accepts values from `1` to `1000`.
+- If `y` is empty, the UI switches it to `∞` and the test runs until the user
+  presses `STOP`.
+
+Each sample is one ping attempt. Successful and failed attempts both count
+toward `y`. Disabled hosts and paused groups are excluded from the active run.
+
+Example: with 15 active hosts, `x = 1`, and `y = 10`, the app attempts about
+`15 * 10 = 150` total pings. The run lasts roughly 10 seconds, but real duration
+can be longer when hosts are slow or offline because each ping can wait for the
+configured timeout.
+
+## Current Interface
+
+The UI is a horizontal page sequence:
+
+- **Hero**: choose interval, packet count, and the server network interface used
+  for pinging. `START` begins the test and moves to the results page.
+- **Results**: host groups are shown as animated bubbles. Hosts inside each
+  bubble show their live state. Use `GROUPS / ALL` to switch between grouped and
+  combined views.
+- **Dashboard**: a 2x2 summary with active-host percentage, average response
+  time, and sent/returned/lost packet counts.
+- **Host detail**: click a host to open its latency history. The view shows the
+  last sixty seconds of latency as vertical bars; offline or zero-latency samples
+  have zero height.
+
+Common actions:
+
+| Action | How |
+| --- | --- |
+| Start or stop monitoring | `START` / `STOP` on the hero |
+| Add a host | `+` floating button |
+| Open host details | Click a host |
+| Edit a host | Shift-click a host |
+| Pause or resume a group | Right-click the group bubble |
+| Delete a group | Use the `x` control inside the group bubble and confirm |
+| Switch grouped/all-host view | `GROUPS / ALL` toggle |
+| Change ping interface | Click the interface line below the hero sentence |
+| Move between pages | Use the large navigation arrows or controlled scroll |
 
 ## Features
 
-- **254-host scale**, real workload ~50. asyncio.Semaphore caps concurrent
-  pings; jittered scheduler avoids subprocess storms.
-- **Start/Stop server lifecycle** with 30-min auto-stop timer (`PING_MONITORING_DURATION_S`)
-  — perfect for ephemeral diagnostic runs.
-- **Groups** as first-class entities: each has a settings page (gear icon ⚙)
-  with editable CIDR rules.
-- **Suggestions inbox** — when a host's IP matches another group's CIDR,
-  the move is *suggested*. Operator accepts/dismisses individually. Never
-  auto-moves. Dismissals persist.
-- **Per-group toggle**: PAUSE/RESUME a whole section (e.g. disable
-  "external" for air-gapped deploy, keep it listed but collapsed).
-- **IP-sorted alternative view** — toggle GROUPS / IP in header.
-- **Live sync** — multiple browser tabs stay in sync via WebSocket.
-- **EN + IT** UI, theme light/dark, persisted in localStorage.
-- **SQLite history** with retention (7 d samples, 30 d events).
-- **Outage events** auto-emitted (3 consecutive failures → outage_start,
-  recovery → outage_end).
-- **Air-gapped install**: offline tar.gz bundle (`tools/build_bundle.sh`)
-  with vendored wheels + Chart.js + Inter fonts. No CDN at runtime.
+- Server-side ping scheduler using `asyncio`.
+- One ping packet per host sample.
+- Concurrent ping limit via `PING_MAX_CONCURRENT_PINGS`.
+- Initial jitter so all hosts do not ping at the same millisecond.
+- Packet-limited and infinite monitoring runs.
+- Network-interface discovery and selection, persisted in SQLite.
+- Persistent host, group, settings, samples, events, and suggestion data.
+- SQLite WAL storage with sample and event retention.
+- WebSocket live sync across browser tabs.
+- Group pause/resume and group deletion with confirmation.
+- Automatic outage events after repeated failures, with recovery events.
+- Italian and English UI strings.
+- Light/dark theme persisted in browser storage.
+- Offline-friendly deployment bundle with vendored frontend assets.
 
-## Documentation
+## Persistence
 
-- [`00_infos/prd.md`](00_infos/prd.md) — Product Requirements (v0.3)
-- [`00_infos/prd-plan.md`](00_infos/prd-plan.md) — Implementation plan
-- [`00_infos/acceptance.md`](00_infos/acceptance.md) — v1 acceptance checklist
-- [`00_infos/audits/final-mega-loop.md`](00_infos/audits/final-mega-loop.md) — GPT+Opus audit
-- [`00_infos/untitled.pen`](00_infos/untitled.pen) — Design system (Pencil)
-- [`00_infos/repo-contract.yaml`](00_infos/repo-contract.yaml) — Machine-readable metadata
+Host and group data is stored on the server in SQLite.
+
+Development default:
+
+```text
+data/ping.db
+```
+
+Systemd deployment default:
+
+```text
+/var/lib/ping-app/ping.db
+```
+
+Restarting the web server does not delete hosts, groups, settings, or history.
+Back up the SQLite database if the host list and monitoring history matter.
 
 ## Development
 
 ```bash
 make venv          # create .venv
-make install-dev   # install dev + runtime deps
+make install       # install runtime dependencies
+make install-dev   # install runtime + test/dev dependencies
 make run           # start dev server on http://127.0.0.1:8000
-make test          # 60+ pytest in ~10 s
-make lint          # ruff
-make format        # ruff format + black
+make test          # run pytest
+make lint          # run ruff
+make format        # run ruff format + black
 make check         # lint + test
-make lock          # recompile requirements*.txt via pip-tools
+make lock          # recompile requirements*.txt with pip-tools
 ```
 
-### Layout
+The current test suite contains 70+ tests.
 
-```
-src/netping/          # Python package
-  app.py              # FastAPI lifespan + factory + WS endpoint
-  api.py              # REST CRUD: hosts, groups, group CIDRs, suggestions, monitoring
-  config.py           # pydantic Settings (env prefix PING_)
-  monitoring.py       # start/stop lifecycle + auto-stop timer
-  pinger.py           # asyncio ping engine + scheduler (Semaphore, jitter)
-  store.py            # SQLite WAL + batched async writer + retention
-  parser.py           # ICMP ping output parser
-  ws.py               # WebSocket hub with per-client timeout fan-out
-tests/                # 60+ pytest; characterisation fixtures under fixtures/
-static/               # Single-page UI (Vanilla JS modules, no build step)
-  vendor/             # Vendored Chart.js + Inter font (air-gap requirement)
-  i18n/               # en.json + it.json
-deploy/               # systemd unit + env template
-tools/                # build_bundle.sh + verify_bundle_offline.sh
-00_infos/             # PRD, plan, audits, acceptance checklist
-```
+## Project Layout
 
-### UI key actions
+```text
+src/netping/
+  app.py              FastAPI app factory, lifespan, static UI mount
+  api.py              REST API for hosts, groups, monitoring, network interface
+  config.py           PING_ environment settings
+  monitoring.py       start/stop lifecycle, packet limit tracking
+  network.py          interface discovery and ping binding helpers
+  parser.py           ping output parsing
+  pinger.py           asyncio ping scheduler
+  store.py            SQLite persistence and retention
+  ws.py               WebSocket fan-out
 
-| Action                          | How |
-|---------------------------------|-----|
-| Open host detail (chart, log)   | Click a host card |
-| Edit a host                     | Shift+Click a host card |
-| Add a host                      | **+** floating button bottom-right |
-| Open group settings (CIDR list) | ⚙ gear icon in group header |
-| Pause / resume a group          | PAUSE / RESUME button in group header |
-| Collapse / expand a group       | ▼ / ▶ caret in group header |
-| Accept move suggestion          | ACCEPT in suggestions inbox |
-| Dismiss suggestion (persistent) | DISMISS in suggestions inbox |
-| Switch group / IP view          | GROUPS / IP toggle (above the host list) |
-| Start / stop monitoring         | START / STOP button in header (countdown) |
+static/
+  index.html          single-page browser UI
+  css/                app styling and ping.me visual overrides
+  js/                 vanilla JS modules
+  i18n/               English and Italian strings
+  vendor/             vendored frontend assets
 
-### Lockfiles
-
-Runtime deps in `requirements.in` → compiled to `requirements.txt` via
-`pip-tools`. Same for `requirements-dev.in/.txt`. Update:
-
-```bash
-make lock
+tests/                pytest suite and ping-output fixtures
+deploy/               systemd unit and environment template
+tools/                offline bundle build and verification scripts
+00_infos/             product notes, acceptance notes, and audits
 ```
 
-## Deploy (air-gapped Linux server)
+## Configuration
 
-Build the offline bundle on an internet-connected machine:
+Settings are loaded from environment variables with the `PING_` prefix.
+
+Useful values:
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `PING_BIND_HOST` | `0.0.0.0` | Host/interface for the HTTP server |
+| `PING_PORT` | `8000` | HTTP port |
+| `PING_DB_PATH` | `data/ping.db` | SQLite database path |
+| `PING_MAX_CONCURRENT_PINGS` | `64` | Max simultaneous ping subprocesses |
+| `PING_DEFAULT_INTERVAL_S` | `1.0` | Default host interval for new hosts |
+| `PING_PING_TIMEOUT_S` | `2.0` | Ping timeout per attempt |
+| `PING_SAMPLE_RETENTION_DAYS` | `7` | Sample retention |
+| `PING_EVENT_RETENTION_DAYS` | `30` | Event retention |
+| `PING_MONITORING_DURATION_S` | `1800` | Legacy API auto-stop duration |
+
+The current web UI sends a packet limit when starting monitoring. The legacy
+duration setting is still used by API clients that start monitoring without a
+packet-limit payload.
+
+## Deploy On A LAN Server
+
+Build an offline bundle on a machine with internet access:
 
 ```bash
 make install-dev
-tools/build_bundle.sh                              # default: manylinux2014_x86_64, py3.11
+tools/build_bundle.sh
 tools/verify_bundle_offline.sh dist/ping-app-*.tar.gz
 ```
 
-Result: `dist/ping-app-<version>.tar.gz` (~9 MB) containing wheels, code,
-vendored assets, install.sh, and systemd unit.
-
-Transfer (USB stick, SCP, etc.) and install on the target:
+Transfer the bundle to the server and install:
 
 ```bash
 sudo tar -xzf ping-app-<version>.tar.gz -C /tmp/
@@ -129,54 +193,56 @@ sudo /tmp/ping-app-<version>/install.sh
 ```
 
 Defaults:
-- App user/group: `ping-app`
-- Code:           `/opt/ping-app`
-- Data:           `/var/lib/ping-app/ping.db`  (back this up)
-- Env:            `/etc/ping-app/env`
-- Service:        `ping-app.service` (auto-start on boot, restart on failure)
 
-Inspect / control:
+| Item | Path |
+| --- | --- |
+| App user/group | `ping-app` |
+| Code | `/opt/ping-app` |
+| Data | `/var/lib/ping-app/ping.db` |
+| Environment | `/etc/ping-app/env` |
+| Service | `ping-app.service` |
+
+Inspect and control the service:
 
 ```bash
 systemctl status ping-app
 journalctl -u ping-app -f
-systemctl restart ping-app    # after editing /etc/ping-app/env
+systemctl restart ping-app
 ```
 
-Open in browser: `http://<server-ip>:8000/`.
+Open the app from another LAN browser:
 
-## Backup & Restore
+```text
+http://<server-ip>:8000/
+```
 
-All state lives in `/var/lib/ping-app/ping.db` (SQLite). Configuration is in
-`/etc/ping-app/env`. There is no separate cache.
+## Backup And Restore
 
-**Backup** (online — WAL mode safe):
+All application state lives in SQLite. In production, back up:
+
+```text
+/var/lib/ping-app/ping.db
+/etc/ping-app/env
+```
+
+Online backup:
 
 ```bash
 sudo sqlite3 /var/lib/ping-app/ping.db ".backup '/srv/backup/ping-$(date +%F).db'"
 sudo cp /etc/ping-app/env /srv/backup/env-$(date +%F)
 ```
 
-A simple cron line:
-
-```cron
-0 3 * * * sqlite3 /var/lib/ping-app/ping.db ".backup '/srv/backup/ping-$(date +\%F).db'" && find /srv/backup -name 'ping-*.db' -mtime +14 -delete
-```
-
-**Restore** to a fresh server:
+Restore:
 
 ```bash
 sudo systemctl stop ping-app
 sudo install -o ping-app -g ping-app -m 0640 backup.db /var/lib/ping-app/ping.db
-sudo install -o root     -g ping-app -m 0640 env      /etc/ping-app/env
+sudo install -o root -g ping-app -m 0640 env /etc/ping-app/env
 sudo systemctl start ping-app
 ```
 
-`install.sh` is idempotent — re-running it never touches `/var/lib/ping-app/`,
-so deploying a new bundle never destroys history. The schema uses
-`CREATE … IF NOT EXISTS`, so older DBs from previous versions are compatible.
+`install.sh` is idempotent and does not wipe `/var/lib/ping-app`.
 
 ## License
 
-[MIT](LICENSE). Vendored libraries (Chart.js, Inter) keep their original
-licenses (MIT and SIL Open Font License respectively).
+[MIT](LICENSE). Vendored libraries keep their original licenses.

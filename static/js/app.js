@@ -18,7 +18,7 @@ import { open as openGroupSettings } from "./group-settings.js";
 import { refresh as refreshSuggestions } from "./suggestions.js";
 import { initMotion, enhanceMotion } from "./motion.js";
 import { initPingSettings } from "./ping-settings.js?v=hero-dashboard-polish-1";
-import { initDesignExamples } from "./design-examples.js?v=large-bubbles-17";
+import { initDesignExamples } from "./design-examples.js?v=scroll-boundary-1";
 import { initNetworkInterface } from "./network-interface.js?v=interface-select-2";
 
 // ---- theme ------------------------------------------------------------------

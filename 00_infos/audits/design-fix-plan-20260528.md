@@ -13,7 +13,7 @@ All findings verified against the actual code (63/63 tests green as baseline). D
 
 ## 1. Fix-Strategie
 
-**Branch:** Ein einziger `fix/varga-readymag-p0` von aktuellem `main`. Begründung: alle Defekte gehören zur selben Regressionswelle (readymag-Redesign), und ein Split backend/frontend/css erzeugt für Francesco (SSOT-Owner) drei Review-Threads statt einem. Atomare Conventional-Commits pro Fix; bei Bedarf Squash-Merge im PR.
+**Branch:** Ein einziger `fix/varga-visual-redesign-p0` von aktuellem `main`. Begründung: alle Defekte gehören zur selben Regressionswelle (visual-redesign-Redesign), und ein Split backend/frontend/css erzeugt für Francesco (SSOT-Owner) drei Review-Threads statt einem. Atomare Conventional-Commits pro Fix; bei Bedarf Squash-Merge im PR.
 
 **Scope dieses Sprints:** Alle P0 (1–7; P0‑8 ist kein Defekt, nur Verifikation). Dazu die **billigen** P1 mit Test-Abdeckung oder Trivialaufwand: Cluster C (ping-settings Race), Cluster D (rename-Atomarität + Statuscode), Cluster E (drilldown key-type, dead i18n, dup-Validation), sowie aus Cluster B nur das Entfernen der inline-`onclick` Duplikate.
 
@@ -172,7 +172,7 @@ ${gstate.enabled ? t("group.disable") : t("group.enable")}
 
 ## 3. P1-Cluster
 
-**Cluster A — CSS-Dual-Stylesheet-Debt.** `app.css` (2535 Z, +1295), `readymag-overrides.css` (633 Z, neu), 11× `!important`, **23+ identische Selektoren in beiden Files** (`.hero`, `.drill`, `.deck-main`, `.metric-card--*`, `.page-*`…). → **Follow-up + HOLD-2.** Zu groß/risikoreich für diesen Sprint, braucht Design-Entscheid (mergen vs. Override-Layer behalten). Verstößt zudem gegen <300-Zeilen-Regel.
+**Cluster A — CSS-Dual-Stylesheet-Debt.** `app.css` (2535 Z, +1295), `pingme-overrides.css` (633 Z, neu), 11× `!important`, **23+ identische Selektoren in beiden Files** (`.hero`, `.drill`, `.deck-main`, `.metric-card--*`, `.page-*`…). → **Follow-up + HOLD-2.** Zu groß/risikoreich für diesen Sprint, braucht Design-Entscheid (mergen vs. Override-Layer behalten). Verstößt zudem gegen <300-Zeilen-Regel.
 
 **Cluster B — design-examples.js als Production.** Wheel-Hijack `preventDefault` mit `{passive:false}` (`design-examples.js:24-30`) killt nativen Scroll; inline `onclick` (`index.html:45,49,50,67`) dupliziert die JS-Handler (13-16) → CSP-Risiko. → **Teilfix jetzt:** inline `onclick` entfernen (JS-Handler bleiben). **HOLD-3:** Wheel-Deck-Navigation als Default behalten oder hinter `prefers-reduced-motion` gaten?
 
@@ -223,9 +223,9 @@ Zusätzlich `grep -oE 't\(\"[^\"]+\"' static/js/*.js` gegen die Keysets prüfen 
 
 ## 5. Rollout
 
-- **Branch:** `fix/varga-readymag-p0` von aktuellem `main`. Atomare Conventional-Commits: `fix(monitoring): reject start while active`, `fix(api): apply enabled/collapsed alongside group rename`, `fix(i18n): localize group delete confirm + pause/resume`, `fix(dashboard): open drilldown once per click`, `fix(assets): drop ?v query from module imports`, `chore(cleanup): remove dead drill i18n keys`.
+- **Branch:** `fix/varga-visual-redesign-p0` von aktuellem `main`. Atomare Conventional-Commits: `fix(monitoring): reject start while active`, `fix(api): apply enabled/collapsed alongside group rename`, `fix(i18n): localize group delete confirm + pause/resume`, `fix(dashboard): open drilldown once per click`, `fix(assets): drop ?v query from module imports`, `chore(cleanup): remove dead drill i18n keys`.
 - **PR an Francescos `main`** — gemäß `CLAUDE.md` nur via PR, Push nach `origin` nur auf ausdrücklichen Befehl.
-- **13 Mikro-Commits:** Sie sind lokal-only (`main` wurde ersetzt, nie nach `origin` gepusht; Backup `backup/main-pre-readymag-20260528`). Empfehlung: **Squash-Merge im PR** → Francesco sieht einen sauberen Commit „feat: readymag-inspired redesign". Alternative (lokal sauber, rewrites History): `git reset --soft backup/main-pre-readymag-20260528` + 1–2 Re-Commits, dann Fixes obendrauf. ⚠️ `git rebase -i` ist in dieser Umgebung nicht verfügbar → kein interaktives Squash.
+- **13 Mikro-Commits:** Sie sind lokal-only (`main` wurde ersetzt, nie nach `origin` gepusht; Backup `backup/main-pre-visual-redesign-20260528`). Empfehlung: **Squash-Merge im PR** → Francesco sieht einen sauberen Commit „feat: visual-redesign-inspired redesign". Alternative (lokal sauber, rewrites History): `git reset --soft backup/main-pre-visual-redesign-20260528` + 1–2 Re-Commits, dann Fixes obendrauf. ⚠️ `git rebase -i` ist in dieser Umgebung nicht verfügbar → kein interaktives Squash.
 - **Konvention:** Conventional Commits (`<type>(<scope>): <subject>`), konsistent mit `61a7f17 docs: …`.
 
 ---
@@ -233,9 +233,9 @@ Zusätzlich `grep -oE 't\(\"[^\"]+\"' static/js/*.js` gegen die Keysets prüfen 
 ## 6. Offene Fragen (HOLD-Kandidaten → `00_infos/meta/open-questions.md`)
 
 - **HOLD-1 (P0‑3):** Soll START-während-aktiv No-op (empfohlen), sauberer Neustart oder Duration-Re-arm sein? Ändert dokumentierte Semantik. → Francesco.
-- **HOLD-2 (Cluster A):** CSS-Strategie — `readymag-overrides.css` in `app.css` mergen, Override-Layer formalisieren, oder Redesign zurückrollen? 23+ kollidierende Selektoren + `!important`-Eskalation. → Francesco.
+- **HOLD-2 (Cluster A):** CSS-Strategie — `pingme-overrides.css` in `app.css` mergen, Override-Layer formalisieren, oder Redesign zurückrollen? 23+ kollidierende Selektoren + `!important`-Eskalation. → Francesco.
 - **HOLD-3 (Cluster B):** Wheel-Hijack-Deck-Navigation als Production-Verhalten behalten? Wenn ja, hinter `prefers-reduced-motion` gaten (Barrierefreiheit/Scroll).
 - **HOLD-4 (Cluster C):** Sollen Interval/Packet-Settings über Reload persistieren? Entscheidet, ob `localStorage`-Code repariert oder gelöscht wird.
 - **HOLD-5:** Drilldown-Redesign final (keine Rückkehr von History/Events-Tabs)? Voraussetzung fürs Löschen der toten `drill.*`-Keys.
-- **HOLD-6:** Squash der 13 Commits vor PR an Francesco gewünscht, oder readymag-Historie erhalten? → Francescos Präferenz als SSOT-Owner.
+- **HOLD-6:** Squash der 13 Commits vor PR an Francesco gewünscht, oder visual-redesign-Historie erhalten? → Francescos Präferenz als SSOT-Owner.
 - **HOLD-7 (P0‑2, nach Verify):** Drilldown-URL-Semantik — soll Host-Klick eine sharebare URL erzeugen (Hash bleibt nach Klick) und Back-Button den Drill schliessen, oder ist Drilldown rein modal ohne History? Entscheidet, ob P0‑2 mit `preventDefault` (modal) oder `history.replaceState` (sharebar ohne Push) implementiert wird.
