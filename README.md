@@ -126,6 +126,37 @@ make lock          # recompile requirements*.txt with pip-tools
 
 The current test suite contains 70+ tests.
 
+## Docker Compose (Linux LAN)
+
+For a local Linux server, run the app with Docker Compose:
+
+```bash
+docker compose up --build
+# open http://<server-ip>:8000/ from any host in the LAN
+# or http://127.0.0.1:8000/ on the server itself
+```
+
+The Compose setup uses `network_mode: host` on purpose. The dashboard discovers
+network interfaces and runs ICMP pings from the server's network namespace; a
+normal Docker bridge network would show container interfaces instead of the host
+LAN. Because host networking is used, Compose does not publish `ports:`. The app
+binds to `0.0.0.0:8000`, so it is reachable from the server and from other LAN
+clients if the Linux firewall allows inbound TCP/8000.
+
+SQLite state is stored in the named Docker volume `ping_app_data`, mounted at
+`/var/lib/ping-app`. The default database path is
+`/var/lib/ping-app/ping.db`. There are no runtime secrets by default; environment
+values are plain Compose settings and can be adjusted in `compose.yaml`.
+
+Useful commands:
+
+```bash
+docker compose ps
+docker compose logs -f
+docker compose down
+docker volume inspect ping-app_ping_app_data
+```
+
 ## Project Layout
 
 ```text

@@ -12,13 +12,12 @@ import platform
 import re
 import socket
 from datetime import UTC, datetime
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Body, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field, field_validator
 
-from . import __version__
-from . import network
+from . import __version__, network
 from .store import Host, Store
 from .ws import WebSocketHub
 
@@ -80,6 +79,9 @@ class MonitoringStartIn(BaseModel):
     packet_limit: int | None = Field(default=None, ge=1, le=1000)
 
 
+MONITORING_START_BODY = Body()
+
+
 class NetworkInterfacePatch(BaseModel):
     name: str = Field(min_length=1, max_length=80)
 
@@ -119,7 +121,7 @@ async def monitoring_status(request: Request) -> dict[str, Any]:
 @router.post("/api/monitoring/start")
 async def monitoring_start(
     request: Request,
-    payload: MonitoringStartIn | None = Body(default=None),
+    payload: Annotated[MonitoringStartIn | None, MONITORING_START_BODY] = None,
 ) -> dict[str, Any]:
     if payload is None:
         return await _monitoring(request).start()

@@ -47,6 +47,7 @@ class MonitoringController:
         self._packet_limit: int | None = None
         self._packet_counts: dict[int, int] = {}
         self._packet_target_ids: set[int] = set()
+        self._note_sample_tasks: set[asyncio.Task[None]] = set()
         self._limit_mode = "duration"
         self.scheduler.sample_observer = self.note_sample
 
@@ -105,7 +106,11 @@ class MonitoringController:
         if not self._active or self._packet_limit is None:
             return
         run_id = self._run_id
-        asyncio.create_task(self._note_sample(host_id, run_id), name="monitoring-packet-count")
+        task = asyncio.create_task(
+            self._note_sample(host_id, run_id), name="monitoring-packet-count"
+        )
+        self._note_sample_tasks.add(task)
+        task.add_done_callback(self._note_sample_tasks.discard)
 
     async def reconcile_packet_targets(
         self, hosts: list[Host], *, disabled_groups: set[str] | None = None
@@ -129,6 +134,11 @@ class MonitoringController:
             await self.scheduler.stop()
             self._active = False
             self._expires_at = None
+        for task in self._note_sample_tasks:
+            task.cancel()
+        if self._note_sample_tasks:
+            await asyncio.gather(*self._note_sample_tasks, return_exceptions=True)
+            self._note_sample_tasks.clear()
         self._clear_packet_limit()
 
     # ---- internals -----------------------------------------------------------
