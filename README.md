@@ -157,6 +157,9 @@ docker compose down
 docker volume inspect ping-app_ping_app_data
 ```
 
+See [`README-docker.md`](README-docker.md) for the full Linux LAN Docker runbook
+and the verification commands used for this setup.
+
 ## Project Layout
 
 ```text
