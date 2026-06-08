@@ -1,4 +1,4 @@
-contract_version: "1.0"
+contract_version: "2.0"
 
 # === IDENTITAET ===
 repo:
@@ -54,6 +54,7 @@ deployment:
   ci:
     platform: "none"
     auto_deploy: false
+    deploy_branches: []
 
 # === ENV ===
 env:
@@ -72,3 +73,17 @@ env:
 depends_on:
   services: []
   repos: []
+
+# === LIFECYCLE (v2.0) ===
+lifecycle:
+  state: "experiment"
+  kill_date: null
+  owner: "christoph@varga.media"
+  last_review: "2026-06-08"
+
+# === OPERATIONAL (v2.0) ===
+operational:
+  auth_boundary: "none"
+  data_store: "sqlite"
+  backup_class: "standard"
+  host: "external"
