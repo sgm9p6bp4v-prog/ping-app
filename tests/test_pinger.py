@@ -53,6 +53,42 @@ def test_build_ping_command_darwin_binds_source_address(
     assert cmd == ["ping", "-c", "2", "-t", "3", "-S", "192.168.1.20", "8.8.8.8"]
 
 
+def test_build_ping_command_windows_ipv4_uses_route_table(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("netping.pinger.platform.system", lambda: "Windows")
+    cmd = build_ping_command(
+        "8.8.8.8",
+        count=3,
+        timeout_s=2.0,
+        interface="Ethernet",
+        source_address="192.168.1.20",
+    )
+    assert cmd == ["ping", "-n", "3", "-w", "2000", "8.8.8.8"]
+
+
+def test_build_ping_command_windows_ipv6_can_bind_source_address(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("netping.pinger.platform.system", lambda: "Windows")
+    cmd = build_ping_command(
+        "2001:4860:4860::8888",
+        count=1,
+        timeout_s=1.5,
+        source_address="fe80::1",
+    )
+    assert cmd == [
+        "ping",
+        "-n",
+        "1",
+        "-w",
+        "1500",
+        "-S",
+        "fe80::1",
+        "2001:4860:4860::8888",
+    ]
+
+
 async def test_do_ping_returns_dict_on_failure() -> None:
     # invalid command path -> FileNotFoundError handled
     with patch("netping.pinger.build_ping_command", return_value=["/nonexistent/ping", "x"]):

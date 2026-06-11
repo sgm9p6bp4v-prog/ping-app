@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import os
 import platform
 import random
 from collections.abc import Awaitable, Callable
@@ -54,7 +55,13 @@ def build_ping_command(
     timeout_ms = max(1, int(timeout_s * 1000))
     seconds = max(1, int(timeout_s))
     if os_name == "Windows":
-        return ["ping", "-n", str(count), "-w", str(timeout_ms), host]
+        cmd = ["ping", "-n", str(count), "-w", str(timeout_ms)]
+        # Windows ping.exe only supports -S source binding for IPv6. For IPv4
+        # targets the OS routing table remains authoritative.
+        if source_address and ":" in source_address:
+            cmd.extend(["-S", source_address])
+        cmd.append(host)
+        return cmd
     if os_name == "Darwin":
         cmd = ["ping", "-c", str(count), "-t", str(seconds)]
         if source_address:
@@ -90,7 +97,7 @@ async def do_ping(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            env={"LC_ALL": "C", "LANG": "C", "PATH": "/usr/bin:/bin:/usr/sbin:/sbin"},
+            env=_command_env(),
         )
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout_s + 2.0)
         output = stdout.decode(errors="replace") + stderr.decode(errors="replace")
@@ -109,6 +116,15 @@ async def do_ping(
     parsed["ts"] = ts
     parsed["host"] = address
     return parsed
+
+
+def _command_env() -> dict[str, str]:
+    env = os.environ.copy()
+    env["LC_ALL"] = "C"
+    env["LANG"] = "C"
+    if platform.system() != "Windows":
+        env["PATH"] = env.get("PATH") or "/usr/bin:/bin:/usr/sbin:/sbin"
+    return env
 
 
 class PingScheduler:

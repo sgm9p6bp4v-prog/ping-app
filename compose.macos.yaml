@@ -1,0 +1,41 @@
+name: ping-app-macos
+
+services:
+  ping-app:
+    build:
+      context: .
+    image: ping-app:macos-local
+    container_name: ping-app-macos
+    restart: unless-stopped
+    ports:
+      - "${PING_MACOS_HTTP_PORT:-8000}:8000"
+    cap_add:
+      - NET_RAW
+    environment:
+      PING_BIND_HOST: "0.0.0.0"
+      PING_PORT: "8000"
+      PING_DB_PATH: "/var/lib/ping-app/ping.db"
+      PING_SAMPLE_RETENTION_DAYS: "7"
+      PING_EVENT_RETENTION_DAYS: "30"
+      PING_MAX_CONCURRENT_PINGS: "64"
+      PING_DEFAULT_INTERVAL_S: "1.0"
+      PING_PING_TIMEOUT_S: "2.0"
+      PING_SLOW_THRESHOLD_MS: "100.0"
+      PING_WRITE_FLUSH_INTERVAL_S: "0.5"
+      PING_WRITE_FLUSH_MAX_BATCH: "1000"
+      PING_LANGUAGE_DEFAULT: "en"
+    volumes:
+      - ping_app_macos_data:/var/lib/ping-app
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import os, urllib.request; urllib.request.urlopen('http://127.0.0.1:%s/api/info' % os.getenv('PING_PORT', '8000'), timeout=2).read()\"",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  ping_app_macos_data:

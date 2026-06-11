@@ -101,3 +101,11 @@ Observed results:
 
 The local verification host used Docker's Linux environment. On a real Linux LAN
 server, the same host-network Compose setup is the intended deployment path.
+
+For Docker Desktop on macOS, use [`compose.macos.yaml`](compose.macos.yaml) and
+[`README-docker-macos.md`](README-docker-macos.md). The macOS profile uses
+published ports instead of Linux host networking because Docker Desktop runs
+containers inside a Linux VM.
+
+For realistic macOS or Windows testing of physical host interfaces, use the
+native deployment scripts documented in [`README-native.md`](README-native.md).

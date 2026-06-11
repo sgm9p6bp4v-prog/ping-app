@@ -1,0 +1,26 @@
+#
+# Windows runtime dependencies for CPython 3.12 x64.
+# Keep this separate from requirements.txt because the Unix/Linux lock includes
+# uvloop, which is not installed on Windows.
+#
+aiosqlite==0.22.1
+annotated-doc==0.0.4
+annotated-types==0.7.0
+anyio==4.13.0
+click==8.4.1
+colorama==0.4.6
+fastapi==0.136.3
+h11==0.16.0
+httptools==0.8.0
+idna==3.16
+pydantic==2.13.4
+pydantic-core==2.46.4
+pydantic-settings==2.14.1
+python-dotenv==1.2.2
+pyyaml==6.0.3
+starlette==1.1.0
+typing-extensions==4.15.0
+typing-inspection==0.4.2
+uvicorn==0.48.0
+watchfiles==1.2.0
+websockets==16.0

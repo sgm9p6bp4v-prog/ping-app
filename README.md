@@ -22,6 +22,10 @@ Open [http://127.0.0.1:8000](http://127.0.0.1:8000).
 The development server binds to `127.0.0.1`. For LAN access on a server, bind to
 `0.0.0.0` or use the systemd deployment described below.
 
+For realistic macOS or Windows testing, use the native runbooks in
+[`README-native.md`](README-native.md). Native mode is preferred on those
+platforms when the app must see physical network adapters.
+
 ## How The Test Works
 
 The hero sentence controls the ping run:
@@ -160,6 +164,49 @@ docker volume inspect ping-app_ping_app_data
 See [`README-docker.md`](README-docker.md) for the full Linux LAN Docker runbook
 and the verification commands used for this setup.
 
+## Native macOS And Windows
+
+Docker Desktop on macOS and Windows runs containers through a Linux VM. That is
+useful for testing the app image, but not for validating the physical network
+interfaces of the Mac or Windows host. For those platforms, run `ping.me`
+natively:
+
+```bash
+scripts/run-macos.sh
+```
+
+```powershell
+.\scripts\run-windows.ps1
+```
+
+The native scripts create a local virtual environment, install runtime
+dependencies, keep the SQLite database in the OS user data area, and bind the
+server to `0.0.0.0:8000` by default for LAN access. See
+[`README-native.md`](README-native.md) for launchd, Windows Scheduled Task,
+firewall, persistence, and interface-selection details.
+
+## Docker Desktop On macOS
+
+For macOS testing with Docker Desktop, use the dedicated Compose file:
+
+```bash
+docker compose -f compose.macos.yaml up --build
+# open http://127.0.0.1:8000/
+```
+
+If `8000` is already occupied on the Mac, set `PING_MACOS_HTTP_PORT`, for
+example `PING_MACOS_HTTP_PORT=8003 docker compose -f compose.macos.yaml up --build`.
+
+The macOS profile publishes host port `8000` by default and keeps a separate
+SQLite volume named `ping-app-macos_ping_app_macos_data`. It is useful for
+testing the app image, UI, persistence, WebSockets, and ping subprocess behavior
+through Docker Desktop's Linux VM/NAT path.
+
+This is not identical to a real Linux LAN server: the container sees Docker
+Desktop's Linux network namespace rather than the Mac's physical interfaces. See
+[`README-docker-macos.md`](README-docker-macos.md) for the macOS runbook,
+verification commands, and limitations.
+
 ## Project Layout
 
 ```text
@@ -183,6 +230,7 @@ static/
 
 tests/                pytest suite and ping-output fixtures
 deploy/               systemd unit and environment template
+scripts/              native macOS and Windows run/install helpers
 tools/                offline bundle build and verification scripts
 00_infos/             product notes, acceptance notes, and audits
 ```

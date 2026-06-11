@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import os
 import platform
 import re
 import socket
@@ -10,7 +12,7 @@ from dataclasses import dataclass
 from typing import Any
 
 AUTO_INTERFACE = "auto"
-_ENV = {"LC_ALL": "C", "LANG": "C", "PATH": "/usr/bin:/bin:/usr/sbin:/sbin"}
+_UNIX_PATH = "/usr/bin:/bin:/usr/sbin:/sbin"
 
 
 @dataclass(slots=True)
@@ -123,6 +125,12 @@ def detect_default_interface() -> str | None:
         out = _run(["ip", "route", "show", "default"])
         match = re.search(r"\bdev\s+(\S+)", out)
         return match.group(1) if match else None
+    if os_name == "Windows":
+        for item in _windows_ip_configuration():
+            name = str(item.get("InterfaceAlias") or "").strip()
+            gateways = _coerce_str_list(item.get("DefaultGateway"))
+            if name and gateways:
+                return name
     return None
 
 
@@ -138,6 +146,8 @@ def source_address_for_interface(name: str | None) -> str | None:
 
 
 def _interface_names(address_map: dict[str, list[str]]) -> list[str]:
+    if platform.system() == "Windows":
+        return list(address_map)
     names: list[str] = []
     try:
         names = [name for _, name in socket.if_nameindex()]
@@ -157,6 +167,10 @@ def _interface_address_map() -> dict[str, list[str]]:
             return mapped
     if os_name == "Darwin":
         mapped = _darwin_address_map()
+        if mapped:
+            return mapped
+    if os_name == "Windows":
+        mapped = _windows_address_map()
         if mapped:
             return mapped
     return _ifconfig_address_map()
@@ -193,6 +207,61 @@ def _darwin_address_map() -> dict[str, list[str]]:
     return mapped
 
 
+def _windows_address_map() -> dict[str, list[str]]:
+    mapped: dict[str, list[str]] = {}
+    for item in _windows_ip_configuration():
+        name = str(item.get("InterfaceAlias") or "").strip()
+        addresses = _coerce_str_list(item.get("IPv4Address"))
+        if name and addresses:
+            mapped[name] = addresses
+    return mapped
+
+
+def _windows_ip_configuration() -> list[dict[str, Any]]:
+    script = (
+        "Get-NetIPConfiguration | "
+        "Select-Object InterfaceAlias,InterfaceIndex,"
+        "@{Name='IPv4Address';Expression={$_.IPv4Address.IPAddress}},"
+        "@{Name='DefaultGateway';Expression={$_.IPv4DefaultGateway.NextHop}},"
+        "@{Name='NetAdapterStatus';Expression={$_.NetAdapter.Status}} | "
+        "ConvertTo-Json -Compress -Depth 4"
+    )
+    out = _run(
+        [
+            "powershell.exe",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            script,
+        ]
+    ).strip()
+    if not out:
+        return []
+    try:
+        parsed = json.loads(out)
+    except json.JSONDecodeError:
+        return []
+    if isinstance(parsed, dict):
+        return [parsed]
+    if isinstance(parsed, list):
+        return [item for item in parsed if isinstance(item, dict)]
+    return []
+
+
+def _coerce_str_list(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        values = [value]
+    elif isinstance(value, list):
+        values = [item for item in value if isinstance(item, str)]
+    else:
+        values = []
+    return [item.strip() for item in values if item.strip()]
+
+
 def _ifconfig_address_map() -> dict[str, list[str]]:
     out = _run(["ifconfig"])
     mapped: dict[str, list[str]] = {}
@@ -221,10 +290,19 @@ def _run(cmd: list[str]) -> str:
             cmd,
             capture_output=True,
             check=False,
-            env=_ENV,
+            env=_command_env(),
             text=True,
             timeout=0.8,
         )
     except (OSError, subprocess.TimeoutExpired):
         return ""
     return result.stdout
+
+
+def _command_env() -> dict[str, str]:
+    env = os.environ.copy()
+    env["LC_ALL"] = "C"
+    env["LANG"] = "C"
+    if platform.system() != "Windows":
+        env["PATH"] = env.get("PATH") or _UNIX_PATH
+    return env
