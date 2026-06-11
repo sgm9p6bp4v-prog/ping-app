@@ -7,6 +7,7 @@ services:
     image: ping-app:local
     container_name: ping-app
     restart: unless-stopped
+    init: true
     network_mode: host
     environment:
       PING_BIND_HOST: "0.0.0.0"

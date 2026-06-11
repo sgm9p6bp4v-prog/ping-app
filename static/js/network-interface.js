@@ -1,3 +1,6 @@
+import { api } from "./api.js";
+import { escapeHtml, escapeAttr } from "./util.js";
+
 const triggerEl = document.getElementById("hero-interface-trigger");
 const labelEl = document.getElementById("hero-host-target");
 const menuEl = document.getElementById("hero-interface-menu");
@@ -24,7 +27,7 @@ export async function initNetworkInterface() {
 export async function refreshNetworkInterface() {
   if (!triggerEl || !labelEl || !menuEl) return;
   try {
-    snapshot = await json("GET", "/api/network/interfaces");
+    snapshot = await api.networkInterfaces();
     renderNetworkInterface();
   } catch (err) {
     console.warn("network interface refresh failed", err);
@@ -48,7 +51,7 @@ async function chooseInterface(name) {
   if (!name) return;
   setBusy(true);
   try {
-    snapshot = await json("PATCH", "/api/network/interface", { name });
+    snapshot = await api.updateNetworkInterface(name);
     renderNetworkInterface();
     setOpen(false);
   } catch (err) {
@@ -95,29 +98,4 @@ function optionHtml(item) {
       ${tags ? `<small>${escapeHtml(tags)}</small>` : ""}
     </button>
   `;
-}
-
-async function json(method, url, body) {
-  const opts = { method, headers: { "X-Requested-With": "fetch" } };
-  if (body !== undefined) {
-    opts.headers["Content-Type"] = "application/json";
-    opts.body = JSON.stringify(body);
-  }
-  const res = await fetch(url, opts);
-  if (!res.ok) {
-    let detail = res.statusText;
-    try { detail = (await res.json()).detail ?? detail; } catch (_) {}
-    throw new Error(`${res.status}: ${detail}`);
-  }
-  return res.status === 204 ? null : res.json();
-}
-
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, (c) => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
-  }[c]));
-}
-
-function escapeAttr(s) {
-  return escapeHtml(s);
 }

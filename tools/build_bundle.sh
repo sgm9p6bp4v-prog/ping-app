@@ -5,10 +5,10 @@
 #   src/             — application code
 #   static/          — frontend + vendored assets (Chart.js, Inter)
 #   deploy/          — systemd unit + env.example
-#   wheels/          — all Python deps as manylinux2014_x86_64 wheels
+#   wheels/          — all Python deps as manylinux wheels (2014/2_17/2_28)
 #   requirements.txt — exact pinned versions
 #   install.sh       — top-level installer
-#   LICENSE, README.md
+#   LICENSE, README.md + README-*.md
 #
 # Usage:
 #   tools/build_bundle.sh
@@ -52,11 +52,24 @@ echo "[bundle] output  : $OUT"
 echo
 
 # 1. wheels (binary-only so no compilation on target)
+# pip accepts repeated --platform flags; offer the whole manylinux ladder for
+# the target arch so deps that only ship manylinux_2_28 (or only 2014) wheels
+# still resolve. Non-manylinux --platform values are passed through unchanged.
+PLATFORM_FLAGS=(--platform "$PLATFORM")
+ARCH=$(printf '%s' "$PLATFORM" | sed -E 's/^manylinux(2014|_2_[0-9]+)_//')
+if [[ "$ARCH" != "$PLATFORM" ]]; then
+  PLATFORM_FLAGS=(
+    --platform "manylinux2014_${ARCH}"
+    --platform "manylinux_2_17_${ARCH}"
+    --platform "manylinux_2_28_${ARCH}"
+  )
+fi
+
 echo "[bundle] downloading wheels..."
 pip download \
   --no-deps \
   --only-binary=:all: \
-  --platform "$PLATFORM" \
+  "${PLATFORM_FLAGS[@]}" \
   --python-version "$PY_VERSION" \
   --implementation cp \
   --dest "$BUILD/wheels" \
@@ -77,17 +90,31 @@ cp -a static "$BUILD/static"
 cp -a deploy "$BUILD/deploy"
 cp requirements.txt "$BUILD/"
 cp install.sh       "$BUILD/"
-cp LICENSE README.md "$BUILD/"
+# Ship the whole README set — README.md cross-links the others.
+cp LICENSE README.md README-*.md "$BUILD/"
+
+# Strip dev-machine bytecode caches from the staged copy: cp -a would ship
+# __pycache__/*.pyc compiled for the builder's Python version(s).
+find "$BUILD/src" "$BUILD/static" -type d -name '__pycache__' -prune -exec rm -rf {} +
+find "$BUILD/src" "$BUILD/static" -type f -name '*.pyc' -delete
 
 # 3. tar (rename build/ -> ping-app-X.Y.Z so `tar --transform` is unnecessary
-# on macOS bsdtar)
+# on macOS bsdtar). With GNU tar we normalize order/mtime/ownership and use
+# `gzip -n` so the same inputs always produce a byte-identical bundle; bsdtar
+# (macOS builder) lacks --sort/--mtime, so there the bundle is functional but
+# not byte-reproducible across builds.
 echo "[bundle] tarring..."
 mv "$BUILD" "dist/ping-app-${VERSION}"
-tar -C dist -czf "$OUT" "ping-app-${VERSION}"
+if tar --version 2>/dev/null | grep -q 'GNU tar'; then
+  tar --sort=name --mtime='UTC 2020-01-01' --owner=0 --group=0 --numeric-owner \
+    -C dist -cf - "ping-app-${VERSION}" | gzip -n > "$OUT"
+else
+  tar -C dist -czf "$OUT" "ping-app-${VERSION}"
+fi
 rm -rf "dist/ping-app-${VERSION}"
 
 SIZE=$(du -h "$OUT" | cut -f1)
-SHA=$(shasum -a 256 "$OUT" | awk '{print $1}')
+SHA=$( (sha256sum "$OUT" 2>/dev/null || shasum -a 256 "$OUT") | awk '{print $1}')
 
 echo
 echo "[bundle] done."

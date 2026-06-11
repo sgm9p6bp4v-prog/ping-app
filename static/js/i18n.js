@@ -10,8 +10,15 @@ let currentLang = DEFAULT;
 
 export async function loadLang(lang) {
   if (!SUPPORTED.includes(lang)) lang = DEFAULT;
-  const res = await fetch(`/i18n/${lang}.json`, { cache: "no-cache" });
-  dict = await res.json();
+  // A missing/broken dictionary must not abort the app bootstrap:
+  // fall back to an empty dict — t() already falls back to the key.
+  try {
+    const res = await fetch(`/i18n/${lang}.json`, { cache: "no-cache" });
+    dict = res.ok ? await res.json() : {};
+  } catch (e) {
+    console.warn(`i18n: failed to load ${lang}`, e);
+    dict = {};
+  }
   currentLang = lang;
   document.documentElement.lang = lang;
   applyDict();

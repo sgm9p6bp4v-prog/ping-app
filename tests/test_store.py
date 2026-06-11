@@ -96,6 +96,26 @@ async def test_history_filters_by_time(store: Store) -> None:
 
 
 @pytest.mark.asyncio
+async def test_history_naive_since_treated_as_utc(store: Store) -> None:
+    """Audit fix: naive since/until must be interpreted as UTC (stored ts are
+    UTC) — plain .astimezone(UTC) would read them as server-local time."""
+    h = await store.create_host(name="x", address="1.1.1.1")
+    base = datetime.now(UTC).replace(microsecond=0) - timedelta(hours=2)
+    for i in range(10):
+        ts = (base + timedelta(minutes=i)).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+        await store.enqueue_sample(
+            Sample(host_id=h.id, ts=ts, rtt_ms=float(i), success=True, error=None)
+        )
+    await store._flush_now()
+    naive_since = (base + timedelta(minutes=5)).replace(tzinfo=None)
+    rows = await store.history(h.id, since=naive_since)
+    assert len(rows) == 5
+    naive_until = (base + timedelta(minutes=2)).replace(tzinfo=None)
+    rows = await store.history(h.id, until=naive_until)
+    assert len(rows) == 3
+
+
+@pytest.mark.asyncio
 async def test_events_filtered_by_host(store: Store) -> None:
     a = await store.create_host(name="a", address="10.0.0.1")
     b = await store.create_host(name="b", address="10.0.0.2")

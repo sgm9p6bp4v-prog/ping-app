@@ -7,6 +7,7 @@
 import { api } from "./api.js";
 import { Store } from "./store.js";
 import { t } from "./i18n.js";
+import { escapeHtml, escapeAttr } from "./util.js";
 
 let backdrop = null;
 let modal = null;
@@ -86,13 +87,13 @@ async function refreshCidrs() {
   try {
     const cidrs = await api.listGroupCidrs(currentName);
     if (cidrs.length === 0) {
-      list.innerHTML = `<li class="cidr-empty">${t("group.cidr_empty")}</li>`;
+      list.innerHTML = `<li class="cidr-empty">${escapeHtml(t("group.cidr_empty"))}</li>`;
       return;
     }
     list.innerHTML = cidrs.map((c) => `
       <li>
         <code>${escapeHtml(c)}</code>
-        <button data-cidr="${escapeAttr(c)}" data-action="delete">${t("group.cidr_remove")}</button>
+        <button data-cidr="${escapeAttr(c)}" data-action="delete">${escapeHtml(t("group.cidr_remove"))}</button>
       </li>
     `).join("");
     list.querySelectorAll('[data-action="delete"]').forEach((btn) => {
@@ -144,10 +145,3 @@ function hideError() {
   const el = modal.querySelector("#gs-cidr-error");
   el.style.display = "none";
 }
-
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, (c) => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
-  }[c]));
-}
-function escapeAttr(s) { return escapeHtml(s); }

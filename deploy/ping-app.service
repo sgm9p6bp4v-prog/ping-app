@@ -9,6 +9,12 @@ Type=simple
 User=ping-app
 Group=ping-app
 WorkingDirectory=/opt/ping-app
+# Defaults first; EnvironmentFile= below overrides Environment= lines.
+# NOTE: do NOT use ${VAR:-default} in ExecStart — systemd supports ":-"
+# fallback expansion only since v250 (Ubuntu 22.04 ships 249, where it
+# expands to an EMPTY argument and uvicorn crash-loops).
+Environment=PING_BIND_HOST=0.0.0.0
+Environment=PING_PORT=8000
 EnvironmentFile=-/etc/ping-app/env
 
 # ICMP requires CAP_NET_RAW; granted as an ambient capability so the unprivileged
@@ -32,8 +38,8 @@ LockPersonality=true
 MemoryDenyWriteExecute=true
 
 ExecStart=/opt/ping-app/.venv/bin/uvicorn netping.app:app \
-  --host ${PING_BIND_HOST:-0.0.0.0} \
-  --port ${PING_PORT:-8000} \
+  --host ${PING_BIND_HOST} \
+  --port ${PING_PORT} \
   --app-dir /opt/ping-app/src \
   --log-level info \
   --no-access-log
