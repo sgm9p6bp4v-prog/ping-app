@@ -3,9 +3,6 @@
 
 > Source: llm-context.md (hash: c8f286e0e55a)
 
-## Global Rules
-@~/.claude/CLAUDE.md
-
 ## Sprint-Infrastruktur (dieses Repo)
 
 Dieses Repo liefert die Sprint-Orchestrierung fuer LARGE Tasks und Multi-Session-Arbeit.
