@@ -1,5 +1,5 @@
 # Development dependencies.
-# Compile via: pip-compile --output-file=requirements-dev.txt requirements-dev.in
+# Compile via: pip-compile --generate-hashes --allow-unsafe --output-file=requirements-dev.txt requirements-dev.in
 
 -r requirements.in
 

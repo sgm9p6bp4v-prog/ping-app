@@ -36,3 +36,10 @@ Thumbs.db
 
 # Build artefacts (offline bundles)
 dist/
+
+# Lokales LLM-Tooling (Fleet-generiert, nie ins externe Repo)
+AGENTS.md
+.gemini/
+.opencode/
+.claude/
+.deploy-worktrees/
