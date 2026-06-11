@@ -3,7 +3,7 @@
 #
 # Output: dist/ping-app-<version>.tar.gz containing:
 #   src/             — application code
-#   static/          — frontend + vendored assets (Chart.js, Inter)
+#   static/          — frontend + vendored assets (Inter)
 #   deploy/          — systemd unit + env.example
 #   wheels/          — all Python deps as manylinux wheels (2014/2_17/2_28)
 #   requirements.txt — exact pinned versions
@@ -50,6 +50,19 @@ echo "[bundle] platform: $PLATFORM"
 echo "[bundle] python  : $PY_VERSION"
 echo "[bundle] output  : $OUT"
 echo
+
+# requirements.txt is pip-compiled on the BUILDER's Python, while the bundle
+# targets --python-version ($PY_VERSION). If a dependency ever gains a
+# python_version environment marker, a lockfile compiled under a different
+# minor would omit/include the wrong packages and the air-gapped install
+# fails. Loud warning, not a hard fail — today's dep tree has no such markers.
+BUILDER_PY=$(python3 -c 'import sys; print(f"{sys.version_info[0]}.{sys.version_info[1]}")' 2>/dev/null || true)
+if [[ -n "$BUILDER_PY" && "$BUILDER_PY" != "$PY_VERSION" ]]; then
+  echo "WARNING: builder Python is $BUILDER_PY but the bundle targets $PY_VERSION." >&2
+  echo "         If any dependency uses python_version environment markers, the"   >&2
+  echo "         lockfile is wrong for the target. Recompile requirements.txt"     >&2
+  echo "         under Python $PY_VERSION (pip-compile --generate-hashes)."        >&2
+fi
 
 # 1. wheels (binary-only so no compilation on target)
 # pip accepts repeated --platform flags; offer the whole manylinux ladder for

@@ -43,3 +43,4 @@ AGENTS.md
 .opencode/
 .claude/
 .deploy-worktrees/
+.playwright-mcp/

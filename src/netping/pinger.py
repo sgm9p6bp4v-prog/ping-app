@@ -24,7 +24,7 @@ import os
 import platform
 import random
 from collections.abc import Awaitable, Callable
-from typing import Any
+from dataclasses import dataclass
 
 from .parser import parse_ping_output
 from .store import Event, Host, Sample, Store, utcnow_iso
@@ -36,6 +36,14 @@ OUTAGE_THRESHOLD_FAILS = 3
 
 Broadcaster = Callable[[dict], Awaitable[None]]
 SampleObserver = Callable[[int], None]
+
+
+@dataclass(slots=True)
+class _OutageState:
+    """Per-host outage detection state (see PingScheduler._outage_state)."""
+
+    fail_streak: int = 0
+    in_outage: bool = False
 
 
 def build_ping_command(
@@ -156,7 +164,7 @@ class PingScheduler:
         # so a task restart (interface/interval change, monitoring stop/start)
         # cannot reset it and emit unpaired/duplicate outage events. Cleared
         # only when a host is removed entirely (audit fix).
-        self._outage_state: dict[int, dict[str, Any]] = {}
+        self._outage_state: dict[int, _OutageState] = {}
         self._stop = asyncio.Event()
         # True between start() and stop(). Reconcile no-ops while inactive
         # so CRUD against a paused server doesn't silently start pinging.
@@ -256,9 +264,7 @@ class PingScheduler:
         # jitter so 254 hosts do not bunch on the same wallclock millisecond
         await asyncio.sleep(random.uniform(0, host.interval_s))
         # Scheduler-level state: survives task restarts (see __init__).
-        state = self._outage_state.setdefault(
-            host.id, {"fail_streak": 0, "in_outage": False}
-        )
+        state = self._outage_state.setdefault(host.id, _OutageState())
         while not self._stop.is_set():
             try:
                 async with self.semaphore:
@@ -282,15 +288,15 @@ class PingScheduler:
 
                 # Outage detection: emit events on state transitions.
                 if result["success"]:
-                    if state["in_outage"]:
+                    if state.in_outage:
                         await self._emit_event(
                             host.id, result["ts"], "outage_end", "host recovered"
                         )
-                        state["in_outage"] = False
-                    state["fail_streak"] = 0
+                        state.in_outage = False
+                    state.fail_streak = 0
                 else:
-                    state["fail_streak"] += 1
-                    if state["fail_streak"] == OUTAGE_THRESHOLD_FAILS and not state["in_outage"]:
+                    state.fail_streak += 1
+                    if state.fail_streak == OUTAGE_THRESHOLD_FAILS and not state.in_outage:
                         why = result.get("error") or "no response"
                         await self._emit_event(
                             host.id,
@@ -298,7 +304,7 @@ class PingScheduler:
                             "outage_start",
                             f"failed {OUTAGE_THRESHOLD_FAILS}x: {why}",
                         )
-                        state["in_outage"] = True
+                        state.in_outage = True
                 if self.broadcaster is not None:
                     # Don't let a stuck broadcaster pace the ping loop.
                     with contextlib.suppress(Exception):

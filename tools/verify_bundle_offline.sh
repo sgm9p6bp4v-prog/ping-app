@@ -65,11 +65,18 @@ fi
 echo "[verify] every pinned requirement has a wheel"
 
 # 2b. version-sentinel cross-check: compute the bundle's target Python the
-# SAME way install.sh does (cp3XY tag → 3.XY) and assert it looks sane.
+# SAME way install.sh does — extract every cp3<minor> wheel tag and take the
+# numeric MAX. Rationale: non-abi3 wheels always carry the exact build-target
+# tag; abi3 wheels (e.g. cp310-abi3-...) carry a lower-or-equal tag and
+# install fine on newer Pythons — so the highest tag is the true target.
 # Guards against regressions of the cp311→"3.111" sed bug.
-SENTINEL=$(ls "$DIR/wheels"/*.whl 2>/dev/null \
-  | grep -oE 'cp3[0-9]+' | sort -u | head -1 \
-  | sed -E 's/^cp3/3./' || true)
+# KEEP IN SYNC: install.sh duplicates this exact pipeline.
+SENTINEL_MINOR=$(ls "$DIR/wheels"/*.whl 2>/dev/null \
+  | grep -oE 'cp3[0-9]+' | sed -E 's/^cp3//' | sort -un | tail -1 || true)
+SENTINEL=""
+if [[ -n "$SENTINEL_MINOR" ]]; then
+  SENTINEL="3.${SENTINEL_MINOR}"
+fi
 if [[ -n "$SENTINEL" ]]; then
   [[ "$SENTINEL" =~ ^3\.[0-9]+$ ]] \
     || { echo "FAIL: wheel-tag→version transform produced '$SENTINEL' (expected 3.<minor>)"; exit 1; }
@@ -113,8 +120,7 @@ echo "[verify] systemd unit looks well-formed"
 LEAKS=$(grep -rEn 'https?://(cdn\.|fonts\.googleapis|unpkg|jsdelivr)' "$DIR/static/" 2>/dev/null \
         | grep -v 'vendor-manifest.json' \
         | grep -v 'OFL.txt' \
-        | grep -v 'LICENSE' \
-        | grep -v 'chartjs.LICENSE' || true)
+        | grep -v 'LICENSE' || true)
 if [[ -n "$LEAKS" ]]; then
   echo "FAIL: CDN/external URLs in static/ — air-gap leak"
   echo "$LEAKS"

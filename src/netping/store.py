@@ -104,6 +104,22 @@ CREATE TABLE IF NOT EXISTS app_settings (
 # write lock is released between chunks (see Store._purge_table).
 PURGE_CHUNK_ROWS = 50_000
 
+# Single source of truth for the samples/events INSERTs: used by BOTH the
+# batched executemany flush path and the per-row FK-violation fallback, so the
+# two statements (and their param tuples) can never drift apart.
+_SAMPLES_INSERT_SQL = (
+    "INSERT INTO samples (host_id, ts, rtt_ms, success, error) VALUES (?, ?, ?, ?, ?)"
+)
+_EVENTS_INSERT_SQL = "INSERT INTO events (host_id, ts, type, message) VALUES (?, ?, ?, ?)"
+
+
+def _sample_params(s: Sample) -> tuple[Any, ...]:
+    return (s.host_id, s.ts, s.rtt_ms, int(s.success), s.error)
+
+
+def _event_params(e: Event) -> tuple[Any, ...]:
+    return (e.host_id, e.ts, e.type, e.message)
+
 
 def utcnow_iso() -> str:
     return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
@@ -655,19 +671,12 @@ class Store:
         async with self._conn() as db:
             for s in samples:
                 try:
-                    await db.execute(
-                        "INSERT INTO samples (host_id, ts, rtt_ms, success, error) "
-                        "VALUES (?, ?, ?, ?, ?)",
-                        (s.host_id, s.ts, s.rtt_ms, int(s.success), s.error),
-                    )
+                    await db.execute(_SAMPLES_INSERT_SQL, _sample_params(s))
                 except sqlite3.IntegrityError:
                     dropped += 1
             for e in events:
                 try:
-                    await db.execute(
-                        "INSERT INTO events (host_id, ts, type, message) VALUES (?, ?, ?, ?)",
-                        (e.host_id, e.ts, e.type, e.message),
-                    )
+                    await db.execute(_EVENTS_INSERT_SQL, _event_params(e))
                 except sqlite3.IntegrityError:
                     dropped += 1
             await db.commit()
@@ -675,17 +684,11 @@ class Store:
 
     @staticmethod
     async def _insert_samples(db: aiosqlite.Connection, samples: Iterable[Sample]) -> None:
-        await db.executemany(
-            "INSERT INTO samples (host_id, ts, rtt_ms, success, error) VALUES (?, ?, ?, ?, ?)",
-            [(s.host_id, s.ts, s.rtt_ms, int(s.success), s.error) for s in samples],
-        )
+        await db.executemany(_SAMPLES_INSERT_SQL, [_sample_params(s) for s in samples])
 
     @staticmethod
     async def _insert_events(db: aiosqlite.Connection, events: Iterable[Event]) -> None:
-        await db.executemany(
-            "INSERT INTO events (host_id, ts, type, message) VALUES (?, ?, ?, ?)",
-            [(e.host_id, e.ts, e.type, e.message) for e in events],
-        )
+        await db.executemany(_EVENTS_INSERT_SQL, [_event_params(e) for e in events])
 
     async def purge(self, *, sample_days: int, event_days: int) -> tuple[int, int]:
         """Delete samples older than ``sample_days`` and events older than

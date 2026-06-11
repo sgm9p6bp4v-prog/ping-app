@@ -5,25 +5,22 @@ export function connect({ url, onMessage, onState }) {
   let ws = null;
   let backoff = 250;
   let stopped = false;
-  let stableTimer = 0;
+  let openedAt = 0;
 
   function open() {
     onState("disconnected");
     ws = new WebSocket(url);
     ws.addEventListener("open", () => {
-      // Only reset the backoff once the connection has stayed open for a
-      // while — an accept-then-drop loop must keep backing off, not hammer.
-      stableTimer = setTimeout(() => {
-        stableTimer = 0;
-        backoff = 250;
-      }, 3000);
+      openedAt = Date.now();
       onState("connected");
     });
     ws.addEventListener("close", () => {
-      if (stableTimer) {
-        clearTimeout(stableTimer);
-        stableTimer = 0;
-      }
+      // Only reset the backoff if the connection stayed open for a while —
+      // an accept-then-drop loop must keep backing off, not hammer. Backoff
+      // is only read when scheduling the reopen below, so checking the open
+      // duration here is equivalent to a reset-after-3s-stable timer.
+      if (openedAt && Date.now() - openedAt >= 3000) backoff = 250;
+      openedAt = 0;
       ws = null;
       onState("disconnected");
       if (!stopped) scheduleReopen();

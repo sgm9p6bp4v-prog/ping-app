@@ -11,6 +11,11 @@
 
 set -euo pipefail
 
+# Hardened hosts often run root with umask 027/077 — files created below would
+# then be unreadable by the ping-app service user (venv/src group/other access
+# stripped → systemd 203/EXEC crash loop). Force a world-readable umask.
+umask 022
+
 APP_USER=${APP_USER:-ping-app}
 APP_GROUP=${APP_GROUP:-ping-app}
 APP_DIR=${APP_DIR:-/opt/ping-app}
@@ -48,13 +53,18 @@ fi
 
 # Bundle ships CPython wheels for one Python version (see tools/build_bundle.sh
 # --python-version, default 3.11). Mismatch = pip will refuse to install the
-# wheels with --no-index → silent install failure. We pick the wheel-tagged
-# version from a sentinel wheel filename and compare exactly.
-# Tag→version mapping: cp311→3.11, cp312→3.12, cp313→3.13 (strip the "cp3"
-# prefix, prepend "3."). verify_bundle_offline.sh cross-checks this transform.
-EXPECTED_PY=$(ls "$BUNDLE_DIR/wheels"/*.whl 2>/dev/null \
-  | grep -oE 'cp3[0-9]+' | sort -u | head -1 \
-  | sed -E 's/^cp3/3./' || true)
+# wheels with --no-index → silent install failure. We derive the bundle's
+# target from the wheel tags: extract every cp3<minor> tag and take the
+# numeric MAX. Rationale: non-abi3 wheels always carry the exact build-target
+# tag; abi3 wheels (e.g. cp310-abi3-...) carry a lower-or-equal tag and
+# install fine on newer Pythons — so the highest tag is the true target.
+# KEEP IN SYNC: tools/verify_bundle_offline.sh duplicates this exact pipeline.
+EXPECTED_PY_MINOR=$(ls "$BUNDLE_DIR/wheels"/*.whl 2>/dev/null \
+  | grep -oE 'cp3[0-9]+' | sed -E 's/^cp3//' | sort -un | tail -1 || true)
+EXPECTED_PY=""
+if [[ -n "$EXPECTED_PY_MINOR" ]]; then
+  EXPECTED_PY="3.${EXPECTED_PY_MINOR}"
+fi
 if [[ -z "$EXPECTED_PY" ]]; then
   # All-pure bundle — any modern Python works.
   case "$PY_VER" in
@@ -104,16 +114,25 @@ copy "$BUNDLE_DIR/src"    "$APP_DIR/src"
 copy "$BUNDLE_DIR/static" "$APP_DIR/static"
 install -m 0644 "$BUNDLE_DIR/requirements.txt" "$APP_DIR/requirements.txt"
 
+# Re-establish the root-owned-code invariant regardless of prior installer or
+# builder umask: installs done by the OLD installer chowned APP_DIR to the
+# service user, and rsync/cp -a can preserve restrictive modes from the
+# builder. Root ownership + world-readability here; DATA_DIR is chowned to
+# the service user further below — that chown MUST stay after this block.
+chown -R root:root "$APP_DIR"
+chmod -R u=rwX,go=rX "$APP_DIR"
+
 # ---------------- venv ------------------------------------------------------
 
 VENV="$APP_DIR/.venv"
 # Stale-ABI guard: a venv left behind by a previous install with a different
-# Python (e.g. OS upgrade 3.11→3.12) has broken compiled deps. Recreate it.
+# Python MINOR (e.g. OS upgrade 3.11→3.12) has broken compiled deps. Compare
+# minor versions only — patch-level upgrades (3.11.8→3.11.9) keep the ABI and
+# must NOT force a rebuild. A broken/missing venv python yields "" → rebuild.
 if [[ -d $VENV ]]; then
-  VENV_PY_VER=$("$VENV/bin/python" -V 2>&1 || true)
-  TARGET_PY_VER=$("$PY" -V 2>&1)
-  if [[ "$VENV_PY_VER" != "$TARGET_PY_VER" ]]; then
-    echo "[install] venv Python ($VENV_PY_VER) != target Python ($TARGET_PY_VER) — recreating venv"
+  VENV_PY_VER=$("$VENV/bin/python" -c 'import sys; print(f"{sys.version_info[0]}.{sys.version_info[1]}")' 2>/dev/null || true)
+  if [[ "$VENV_PY_VER" != "$PY_VER" ]]; then
+    echo "[install] venv Python (${VENV_PY_VER:-broken}) != target Python ($PY_VER) — recreating venv"
     rm -rf "$VENV"
   fi
 fi

@@ -35,6 +35,18 @@ EVENTS_MAX_LIMIT = 5_000
 HOST_CAP = 254
 
 
+def _normalize_cidr(value: str) -> str:
+    """Normalize a CIDR string to its network form (e.g. "10.0.0.5/24" →
+    "10.0.0.0/24"). Shared by the CidrIn validator (add path) and the delete
+    endpoint so stored and queried forms always match.
+
+    Raises ValueError on invalid input."""
+    try:
+        return str(ipaddress.ip_network(value.strip(), strict=False))
+    except ValueError as e:
+        raise ValueError(f"invalid CIDR {value!r}: {e}") from e
+
+
 def _validate_address(value: str) -> str:
     v = value.strip()
     if not v:
@@ -143,11 +155,7 @@ async def info(request: Request) -> dict[str, Any]:
         "lan_ip": _detect_lan_ip(),
         "os": platform.system(),
         "ws_clients": len(_hub(request)),
-        # interface_snapshot shells out (up to ~0.8s per subprocess) — keep
-        # it off the event loop so it can't stall other handlers (audit fix).
-        "ping_interface": await asyncio.to_thread(
-            network.interface_snapshot, selected_interface
-        ),
+        "ping_interface": await network.interface_snapshot_async(selected_interface),
     }
 
 
@@ -166,8 +174,7 @@ async def list_hosts(request: Request) -> list[dict[str, Any]]:
 @router.get("/api/network/interfaces")
 async def network_interfaces(request: Request) -> dict[str, Any]:
     selected = await _store(request).get_setting("ping_interface", "auto")
-    # Shells out — run off the event loop (audit fix).
-    return await asyncio.to_thread(network.interface_snapshot, selected)
+    return await network.interface_snapshot_async(selected)
 
 
 @router.patch("/api/network/interface")
@@ -175,22 +182,17 @@ async def patch_network_interface(
     payload: NetworkInterfacePatch, request: Request
 ) -> dict[str, Any]:
     selected = network.normalize_interface_selection(payload.name)
-    # The network helpers shell out synchronously (subprocess.run, up to
-    # ~0.8s each) — wrap them in to_thread so the event loop stays
-    # responsive while they run (audit fix).
-    interfaces = await asyncio.to_thread(network.list_network_interfaces)
+    interfaces = await network.list_network_interfaces_async()
     available = {iface.name for iface in interfaces}
     if selected != network.AUTO_INTERFACE and selected not in available:
         raise HTTPException(status_code=422, detail="network interface not available")
     await _store(request).set_setting("ping_interface", selected)
-    ping_interface, ping_source = await asyncio.to_thread(
-        network.ping_binding_for_selection, selected
-    )
+    ping_interface, ping_source = await network.ping_binding_for_selection_async(selected)
     scheduler = getattr(request.app.state, "scheduler", None)
     if scheduler is not None:
         scheduler.set_ping_interface(ping_interface, source_address=ping_source)
         await _reconcile(request)
-    return await asyncio.to_thread(network.interface_snapshot, selected)
+    return await network.interface_snapshot_async(selected)
 
 
 @router.post("/api/hosts", status_code=status.HTTP_201_CREATED)
@@ -261,11 +263,7 @@ class CidrIn(BaseModel):
     @field_validator("cidr")
     @classmethod
     def _validate(cls, v: str) -> str:
-        try:
-            net = ipaddress.ip_network(v.strip(), strict=False)
-        except ValueError as e:
-            raise ValueError(f"invalid CIDR {v!r}: {e}") from e
-        return str(net)
+        return _normalize_cidr(v)
 
 
 class SuggestionAction(BaseModel):
@@ -378,9 +376,9 @@ async def delete_group_cidr(
     # add stores the normalized form (CidrIn validator) — normalize the query
     # param the same way so e.g. "10.0.0.5/24" matches "10.0.0.0/24" (audit fix).
     try:
-        cidr = str(ipaddress.ip_network(cidr.strip(), strict=False))
+        cidr = _normalize_cidr(cidr)
     except ValueError as e:
-        raise HTTPException(status_code=422, detail=f"invalid CIDR {cidr!r}: {e}") from e
+        raise HTTPException(status_code=422, detail=str(e)) from e
     ok = await _store(request).delete_group_cidr(name, cidr)
     if not ok:
         raise HTTPException(status_code=404, detail="cidr not in group")

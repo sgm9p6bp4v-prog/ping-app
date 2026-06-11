@@ -234,6 +234,17 @@ def test_lifespan_host_crud_roundtrip_against_real_wiring(real_app: FastAPI) -> 
         assert "lan" in {g["name"] for g in groups}
 
 
+def test_static_js_module_served_with_no_cache(real_app: FastAPI) -> None:
+    """ES-module imports are unversioned (cache busting only on the entry
+    point) — every static file must carry ``Cache-Control: no-cache`` so
+    browsers revalidate (ETag/304) instead of heuristically caching stale
+    submodules across upgrades."""
+    with TestClient(real_app) as client:
+        r = client.get("/js/api.js")
+        assert r.status_code == 200
+        assert r.headers["cache-control"] == "no-cache"
+
+
 def test_lifespan_shutdown_is_clean_and_app_restartable(real_app: FastAPI) -> None:
     """Open/close the lifespan twice on the same app — shutdown must release
     everything so a restart against the same DB works."""

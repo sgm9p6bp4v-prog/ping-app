@@ -131,22 +131,23 @@ function onWsMessage(msg) {
 
 // On reconnect the server only pushes a host snapshot; group_* and
 // monitoring_state events missed during the outage are gone. Re-fetch that
-// state explicitly on every disconnected→connected transition after the first.
-let wsEverConnected = false;
-let lastWsState = null;
-function onWsState(state) {
+// state explicitly on every reconnect after the first connect (bootstrap
+// already loaded everything for the first one).
+let wsConnectCount = 0;
+function renderWsState(state) {
   const el = document.getElementById("ws-state");
   el.dataset.state = state;
   el.textContent = state === "connected" ? t("ws.connected") : t("ws.disconnected");
-  if (state === "connected" && lastWsState === "disconnected") {
-    if (wsEverConnected) {
-      loadGroups();
-      refreshSuggestions();
-      monitoring.resync();
-    }
-    wsEverConnected = true;
+}
+function onWsState(state) {
+  renderWsState(state);
+  if (state !== "connected") return;
+  wsConnectCount += 1;
+  if (wsConnectCount > 1) {
+    loadGroups();
+    refreshSuggestions();
+    monitoring.resync();
   }
-  lastWsState = state;
 }
 
 // ---- click handlers ---------------------------------------------------------
@@ -199,8 +200,8 @@ Store.subscribe((reason = "sample") => {
     const lang = localStorage.getItem("netping.lang") ?? "en";
     await loadLang(lang);
     initLangButtons(() => {
-      // re-render with new strings
-      onWsState(document.getElementById("ws-state").dataset.state ?? "disconnected");
+      // re-render with new strings (label only — not a connection event)
+      renderWsState(document.getElementById("ws-state").dataset.state ?? "disconnected");
       renderDashboard();
       enhanceMotion();
     });

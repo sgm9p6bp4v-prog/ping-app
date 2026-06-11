@@ -52,3 +52,20 @@ def test_ws_rejects_cross_origin_same_scheme_other_host(client: TestClient) -> N
         "/ws", headers={"Origin": "http://testserver.attacker.example"}
     ) as ws:
         ws.receive_json()
+
+
+def test_ws_wildcard_cors_allows_any_origin(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """PING_CORS_ORIGINS='["*"]' opts into any origin — the WS guard honors it
+    with the same semantics as CORSMiddleware."""
+    monkeypatch.setenv("PING_DB_PATH", str(tmp_path / "ping.db"))
+    monkeypatch.setenv("PING_CORS_ORIGINS", '["*"]')
+    reset_settings()
+    try:
+        with TestClient(create_app()) as c, c.websocket_connect(
+            "/ws", headers={"Origin": "http://other-lan-host.example"}
+        ) as ws:
+            assert ws.receive_json()["type"] == "snapshot"
+    finally:
+        reset_settings()
