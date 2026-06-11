@@ -30,6 +30,10 @@ export const Store = {
   },
 
   upsertGroup(g, reason = "group") {
+    // A collapsed-state change adds/removes the host grid, which only a
+    // structure render rebuilds — a plain "group" (live) notify is a no-op.
+    const prev = this.groups.get(g.name);
+    if (!prev || prev.collapsed !== g.collapsed) reason = "structure";
     this.groups.set(g.name, g);
     this.notify(reason);
   },
@@ -138,7 +142,11 @@ function deriveStatus(entry) {
   if (entry.samples.length === 0) return "idle";
   if (entry.failStreak >= OFFLINE_FAIL_STREAK) return "offline";
   const last = entry.samples[entry.samples.length - 1];
-  if (!last.success) return entry.failStreak > 0 ? "offline" : "online";
+  if (!last.success) {
+    // Below the offline threshold a lost packet keeps the previous
+    // non-offline status instead of flipping the host immediately.
+    return entry.status === "offline" ? "online" : entry.status;
+  }
   return last.rtt_ms != null && last.rtt_ms > SLOW_THRESHOLD_MS ? "slow" : "online";
 }
 

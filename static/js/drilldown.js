@@ -3,6 +3,7 @@
  */
 import { Store } from "./store.js";
 import { t } from "./i18n.js";
+import { escapeHtml, escapeAttr } from "./util.js";
 
 let panel = null;
 let currentHostId = null;
@@ -107,10 +108,3 @@ function refreshChart() {
 function findHost(hostId) {
   return Store.hosts.get(Number(hostId));
 }
-
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, (c) => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
-  }[c]));
-}
-function escapeAttr(s) { return escapeHtml(s); }

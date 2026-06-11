@@ -28,8 +28,7 @@ export function initMotion() {
 
 export function enhanceMotion() {
   colorPingDot();
-  splitText(".magnetic-text");
-  observeReveal(".hero, .kpi, .view-toggle-bar, .suggestions, .group, .host-card, .app-footer");
+  observeReveal(".hero, .view-toggle-bar, .suggestions, .group, .host-card, .app-footer");
 }
 
 function colorPingDot() {
@@ -59,28 +58,11 @@ function onPointerMove(event) {
     raf = 0;
     root.style.setProperty("--cursor-x", `${pointer.x}px`);
     root.style.setProperty("--cursor-y", `${pointer.y}px`);
-    applyMagneticTilt(pointer.x, pointer.y);
   });
 }
 
 function onScroll() {
   root.style.setProperty("--scroll-shift", `${window.scrollY}px`);
-}
-
-function splitText(selector) {
-  document.querySelectorAll(selector).forEach((el) => {
-    const text = el.textContent;
-    if (!text || el.dataset.motionText === text) return;
-    el.dataset.motionText = text;
-    el.textContent = "";
-    Array.from(text).forEach((char, index) => {
-      const span = document.createElement("span");
-      span.className = "motion-char";
-      span.style.setProperty("--char-index", index);
-      span.textContent = char === " " ? "\u00a0" : char;
-      el.appendChild(span);
-    });
-  });
 }
 
 function observeReveal(selector) {
@@ -91,16 +73,6 @@ function observeReveal(selector) {
     el.style.setProperty("--reveal-index", index % 8);
     el.classList.add("motion-reveal");
     revealObserver.observe(el);
-  });
-}
-
-function applyMagneticTilt(x, y) {
-  document.querySelectorAll(".magnetic-text").forEach((el) => {
-    const rect = el.getBoundingClientRect();
-    const dx = (x - (rect.left + rect.width / 2)) / Math.max(rect.width, 1);
-    const dy = (y - (rect.top + rect.height / 2)) / Math.max(rect.height, 1);
-    el.style.setProperty("--tilt-x", `${clamp(dx * 7, -7, 7)}deg`);
-    el.style.setProperty("--tilt-y", `${clamp(dy * -5, -5, 5)}deg`);
   });
 }
 

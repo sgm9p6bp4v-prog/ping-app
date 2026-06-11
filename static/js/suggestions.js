@@ -9,6 +9,7 @@
 import { api } from "./api.js";
 import { Store } from "./store.js";
 import { t } from "./i18n.js";
+import { escapeHtml, escapeAttr } from "./util.js";
 
 const sectionEl = document.getElementById("suggestions");
 let items = [];
@@ -35,17 +36,17 @@ function render() {
         <span class="suggestion__addr">${escapeHtml(s.host.address)}</span>
         <span class="suggestion__arrow">→</span>
         <span class="suggestion__group">${escapeHtml(s.suggested_group)}</span>
-        <span class="suggestion__current">(${t("suggestion.currently_in")} ${escapeHtml(s.host.group_name)})</span>
+        <span class="suggestion__current">(${escapeHtml(t("suggestion.currently_in"))} ${escapeHtml(s.host.group_name)})</span>
       </div>
       <div class="suggestion__actions">
-        <button data-action="accept">${t("suggestion.accept")}</button>
-        <button data-action="dismiss" class="muted">${t("suggestion.dismiss")}</button>
+        <button data-action="accept">${escapeHtml(t("suggestion.accept"))}</button>
+        <button data-action="dismiss" class="muted">${escapeHtml(t("suggestion.dismiss"))}</button>
       </div>
     </div>
   `).join("");
   sectionEl.innerHTML = `
     <header class="suggestions__head">
-      <h2>${t("suggestions.title")}</h2>
+      <h2>${escapeHtml(t("suggestions.title"))}</h2>
       <div class="suggestions__meta">${items.length}</div>
     </header>
     <div class="suggestions__list">${rows}</div>
@@ -71,10 +72,3 @@ function render() {
     });
   });
 }
-
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, (c) => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
-  }[c]));
-}
-function escapeAttr(s) { return escapeHtml(s); }

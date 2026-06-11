@@ -26,6 +26,17 @@ export async function init() {
   toggleEl.addEventListener("click", onToggle);
 }
 
+/** Re-fetch monitoring state (used after a WS reconnect, where the
+ * monitoring_state events missed during the outage are lost). */
+export async function resync() {
+  try {
+    const fresh = await api.monitoring();
+    onWsState(fresh);
+  } catch (e) {
+    console.warn("monitoring resync failed", e);
+  }
+}
+
 export function onWsState(s) {
   const wasActive = state.active;
   state = s;

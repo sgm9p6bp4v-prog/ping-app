@@ -1108,34 +1108,6 @@ body.has-pointer .motion-field__cursor {
   transform: translateY(0);
 }
 
-.magnetic-text {
-  --tilt-x: 0deg;
-  --tilt-y: 0deg;
-  display: inline-block;
-  transform: perspective(700px) rotateX(var(--tilt-y)) rotateY(var(--tilt-x));
-  transition: transform 180ms cubic-bezier(.2, .8, .2, 1);
-  transform-origin: center;
-}
-
-.motion-char {
-  display: inline-block;
-  transition:
-    transform 260ms cubic-bezier(.2, .8, .2, 1),
-    color 260ms cubic-bezier(.2, .8, .2, 1);
-  transition-delay: calc(var(--char-index, 0) * 14ms);
-}
-
-.magnetic-text:hover .motion-char,
-.host-card:hover .motion-char,
-.group__head:hover .motion-char {
-  color: color-mix(in srgb, var(--accent) 75%, var(--fg));
-  transform: translateY(-0.14em) rotate(-1.5deg);
-}
-
-.group__head:hover .group__name .motion-char {
-  color: var(--fg);
-}
-
 /* ---- Header ----------------------------------------------------------------- */
 
 .hero__status {
