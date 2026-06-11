@@ -178,6 +178,59 @@ async def test_scheduler_reconcile_restarts_task_on_address_change(store: Store)
         await sched.stop()
 
 
+async def test_start_skips_hosts_already_spawned_by_concurrent_reconcile(store: Store) -> None:
+    """Audit fix: start() sets _started=True then awaits store calls; an API
+    _reconcile (guarded by a different lock) can spawn host loops in that
+    window. start() must not overwrite (and thereby orphan) those tasks."""
+    h = await store.create_host(name="a", address="1.1.1.1")
+    fake = AsyncMock(
+        return_value={
+            "rtt_ms": 1.0,
+            "success": True,
+            "error": None,
+            "ts": "1970-01-01T00:00:00.000Z",
+            "host": "x",
+        }
+    )
+
+    with patch("netping.pinger.do_ping", fake):
+        sched = PingScheduler(store, max_concurrent=4, timeout_s=0.5)
+        # Simulate the race window: _started already flipped, reconcile ran.
+        sched._started = True
+        sched.reconcile(await store.list_hosts())
+        existing = sched._tasks[h.id]
+
+        await sched.start()
+        assert sched._tasks[h.id] is existing, "start() must not respawn a running loop"
+        await sched.stop()
+
+
+async def test_spawn_cancels_preexisting_task_for_same_host(store: Store) -> None:
+    """Defensive layer of the same audit fix: _spawn must cancel a live
+    pre-existing task instead of orphaning it (duplicate ping loops)."""
+    h = await store.create_host(name="a", address="1.1.1.1")
+    fake = AsyncMock(
+        return_value={
+            "rtt_ms": 1.0,
+            "success": True,
+            "error": None,
+            "ts": "1970-01-01T00:00:00.000Z",
+            "host": "x",
+        }
+    )
+
+    with patch("netping.pinger.do_ping", fake):
+        sched = PingScheduler(store, max_concurrent=4, timeout_s=0.5)
+        sched._spawn(h)
+        first = sched._tasks[h.id]
+        sched._spawn(h)
+        second = sched._tasks[h.id]
+        assert second is not first
+        await asyncio.sleep(0.05)
+        assert first.cancelled() or first.done(), "orphaned loop must be cancelled"
+        await sched.stop()
+
+
 async def test_scheduler_reconcile_restarts_task_on_interface_change(store: Store) -> None:
     h = await store.create_host(name="a", address="1.1.1.1", interval_s=1.0)
     fake = AsyncMock(

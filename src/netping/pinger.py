@@ -19,13 +19,17 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 import os
 import platform
 import random
 from collections.abc import Awaitable, Callable
+from typing import Any
 
 from .parser import parse_ping_output
 from .store import Event, Host, Sample, Store, utcnow_iso
+
+log = logging.getLogger(__name__)
 
 # Three consecutive failures = outage_start; one success after that = outage_end.
 OUTAGE_THRESHOLD_FAILS = 3
@@ -148,6 +152,11 @@ class PingScheduler:
         # Cached per running host_id so reconcile can detect changes that
         # require a task restart (address/interval/interface).
         self._signatures: dict[int, tuple[str, float, str | None, str | None]] = {}
+        # Outage detection state lives on the scheduler (not in _host_loop)
+        # so a task restart (interface/interval change, monitoring stop/start)
+        # cannot reset it and emit unpaired/duplicate outage events. Cleared
+        # only when a host is removed entirely (audit fix).
+        self._outage_state: dict[int, dict[str, Any]] = {}
         self._stop = asyncio.Event()
         # True between start() and stop(). Reconcile no-ops while inactive
         # so CRUD against a paused server doesn't silently start pinging.
@@ -160,6 +169,11 @@ class PingScheduler:
         self._started = True
         disabled_groups = await self.store.disabled_group_names()
         for host in await self.store.list_hosts():
+            # A concurrent API reconcile may run between `_started = True`
+            # and this point (it holds a different lock) and spawn loops
+            # already — skip those instead of orphaning their tasks (audit fix).
+            if host.id in self._tasks:
+                continue
             if host.enabled and host.group_name not in disabled_groups:
                 self._spawn(host)
 
@@ -215,12 +229,24 @@ class PingScheduler:
             if h.id not in self._tasks:
                 self._spawn(h)
 
+        # Drop outage state only for hosts that are gone entirely — disabled
+        # hosts keep their streak so re-enable cannot duplicate events.
+        all_ids = {h.id for h in hosts}
+        for hid in list(self._outage_state):
+            if hid not in all_ids:
+                self._outage_state.pop(hid, None)
+
     # ---- internals -----------------------------------------------------------
 
     def _host_signature(self, host: Host) -> tuple[str, float, str | None, str | None]:
         return (host.address, host.interval_s, self.ping_interface, self.ping_source_address)
 
     def _spawn(self, host: Host) -> None:
+        # Defensive: never overwrite a live task — that would orphan a still
+        # running ping loop (duplicate pings for the same host, audit fix).
+        existing = self._tasks.get(host.id)
+        if existing is not None and not existing.done():
+            existing.cancel()
         self._signatures[host.id] = self._host_signature(host)
         self._tasks[host.id] = asyncio.create_task(
             self._host_loop(host), name=f"ping-host-{host.id}"
@@ -229,8 +255,10 @@ class PingScheduler:
     async def _host_loop(self, host: Host) -> None:
         # jitter so 254 hosts do not bunch on the same wallclock millisecond
         await asyncio.sleep(random.uniform(0, host.interval_s))
-        fail_streak = 0
-        in_outage = False
+        # Scheduler-level state: survives task restarts (see __init__).
+        state = self._outage_state.setdefault(
+            host.id, {"fail_streak": 0, "in_outage": False}
+        )
         while not self._stop.is_set():
             try:
                 async with self.semaphore:
@@ -254,15 +282,15 @@ class PingScheduler:
 
                 # Outage detection: emit events on state transitions.
                 if result["success"]:
-                    if in_outage:
+                    if state["in_outage"]:
                         await self._emit_event(
                             host.id, result["ts"], "outage_end", "host recovered"
                         )
-                        in_outage = False
-                    fail_streak = 0
+                        state["in_outage"] = False
+                    state["fail_streak"] = 0
                 else:
-                    fail_streak += 1
-                    if fail_streak == OUTAGE_THRESHOLD_FAILS and not in_outage:
+                    state["fail_streak"] += 1
+                    if state["fail_streak"] == OUTAGE_THRESHOLD_FAILS and not state["in_outage"]:
                         why = result.get("error") or "no response"
                         await self._emit_event(
                             host.id,
@@ -270,10 +298,10 @@ class PingScheduler:
                             "outage_start",
                             f"failed {OUTAGE_THRESHOLD_FAILS}x: {why}",
                         )
-                        in_outage = True
+                        state["in_outage"] = True
                 if self.broadcaster is not None:
                     # Don't let a stuck broadcaster pace the ping loop.
-                    with contextlib.suppress(TimeoutError, Exception):
+                    with contextlib.suppress(Exception):
                         await asyncio.wait_for(
                             self.broadcaster(
                                 {
@@ -290,7 +318,11 @@ class PingScheduler:
             except asyncio.CancelledError:
                 raise
             except Exception:
-                pass
+                # Keep the loop alive, but surface systematic failures
+                # (store gone, enqueue errors) instead of hiding them (audit fix).
+                log.exception(
+                    "host loop iteration failed for host %d (%s)", host.id, host.address
+                )
             await asyncio.sleep(host.interval_s)
 
     async def _emit_event(self, host_id: int, ts: str, evt_type: str, msg: str) -> None:

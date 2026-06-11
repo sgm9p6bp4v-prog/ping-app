@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import asynccontextmanager
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
@@ -17,6 +18,24 @@ from netping.monitoring import MonitoringController
 from netping.pinger import PingScheduler
 from netping.store import Store
 from netping.ws import WebSocketHub
+
+
+async def _poll_until(
+    condition: Callable[[], Awaitable[bool]],
+    *,
+    timeout: float = 10.0,
+    interval: float = 0.05,
+) -> None:
+    """Poll an async condition until true; fail loudly on deadline. Replaces
+    fixed asyncio.sleep() synchronization (flaky on loaded CI)."""
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout
+    while True:
+        if await condition():
+            return
+        if loop.time() >= deadline:
+            raise AssertionError(f"condition not met within {timeout}s")
+        await asyncio.sleep(interval)
 
 
 @pytest.fixture
@@ -50,6 +69,38 @@ async def client(app: FastAPI) -> AsyncIterator[AsyncClient]:
         yield c
 
 
+@asynccontextmanager
+async def _client_with_duration(
+    tmp_path: Path, duration_s: float
+) -> AsyncIterator[AsyncClient]:
+    """App + client wired like the fixtures but with a custom (short)
+    monitoring duration, so timer tests don't burn wall-clock seconds."""
+    a = FastAPI()
+    a.add_middleware(CSRFGuardMiddleware)
+    store = Store(tmp_path / "ping.db", flush_interval_s=0.05)
+    await store.open()
+    store.start_writer()
+    hub = WebSocketHub()
+    sched = PingScheduler(store, max_concurrent=4, timeout_s=0.5)
+    a.state.store = store
+    a.state.hub = hub
+    a.state.scheduler = sched
+    a.state.monitoring = MonitoringController(sched, hub, duration_s=duration_s)
+    a.state.reconcile_lock = asyncio.Lock()
+    a.include_router(router)
+    try:
+        transport = ASGITransport(app=a)
+        async with AsyncClient(
+            transport=transport,
+            base_url="http://test",
+            headers={"X-Requested-With": "fetch"},
+        ) as c:
+            yield c
+    finally:
+        await a.state.monitoring.shutdown()
+        await store.close()
+
+
 # --- monitoring -------------------------------------------------------------
 
 
@@ -76,13 +127,16 @@ async def test_monitoring_stop_clears_expiry(client: AsyncClient) -> None:
     assert body["expires_at"] is None
 
 
-async def test_monitoring_auto_stops_after_duration(client: AsyncClient, app: FastAPI) -> None:
+async def test_monitoring_auto_stops_after_duration(tmp_path: Path) -> None:
     """Timer wired into MonitoringController auto-stops the scheduler."""
-    await client.post("/api/monitoring/start")
-    assert (await client.get("/api/monitoring")).json()["active"] is True
-    # duration_s = 2 in fixture; wait a bit longer than that
-    await asyncio.sleep(2.5)
-    assert (await client.get("/api/monitoring")).json()["active"] is False
+    async with _client_with_duration(tmp_path, duration_s=0.4) as client:
+        await client.post("/api/monitoring/start")
+        assert (await client.get("/api/monitoring")).json()["active"] is True
+
+        async def _stopped() -> bool:
+            return (await client.get("/api/monitoring")).json()["active"] is False
+
+        await _poll_until(_stopped, timeout=10.0)
 
 
 async def test_monitoring_packet_limit_stops_after_each_active_host(
@@ -113,26 +167,29 @@ async def test_monitoring_packet_limit_stops_after_each_active_host(
         assert body["limit_mode"] == "packets"
         assert body["packet_limit"] == 2
 
-        for _ in range(40):
-            if (await client.get("/api/monitoring")).json()["active"] is False:
-                break
-            await asyncio.sleep(0.05)
+        async def _stopped() -> bool:
+            return (await client.get("/api/monitoring")).json()["active"] is False
+
+        await _poll_until(_stopped, timeout=10.0)
 
     assert (await client.get("/api/monitoring")).json()["active"] is False
     assert fake.await_count >= 4
 
 
 async def test_monitoring_infinite_packet_limit_skips_duration_timer(
-    client: AsyncClient,
+    tmp_path: Path,
 ) -> None:
-    r = await client.post("/api/monitoring/start", json={"packet_limit": None})
-    body = r.json()
-    assert body["active"] is True
-    assert body["limit_mode"] == "infinite"
-    assert body["expires_at"] is None
-    await asyncio.sleep(2.5)
-    assert (await client.get("/api/monitoring")).json()["active"] is True
-    await client.post("/api/monitoring/stop")
+    async with _client_with_duration(tmp_path, duration_s=0.3) as client:
+        r = await client.post("/api/monitoring/start", json={"packet_limit": None})
+        body = r.json()
+        assert body["active"] is True
+        assert body["limit_mode"] == "infinite"
+        assert body["expires_at"] is None
+        # Negative test: wait clearly past the 0.3s duration window — the
+        # duration timer must NOT fire in infinite mode.
+        await asyncio.sleep(0.9)
+        assert (await client.get("/api/monitoring")).json()["active"] is True
+        await client.post("/api/monitoring/stop")
 
 
 async def test_monitoring_rejects_packet_limit_above_cap(client: AsyncClient) -> None:
@@ -265,17 +322,20 @@ async def test_group_disable_stops_pinging_after_reconcile(
     )
     await client.post("/api/monitoring/start")
     sched: PingScheduler = app.state.scheduler
-    # let scheduler spawn the task
-    await asyncio.sleep(0.05)
-    assert 1 in sched._tasks
+
+    async def _running() -> bool:
+        return 1 in sched._tasks
+
+    async def _not_running() -> bool:
+        return 1 not in sched._tasks
+
+    await _poll_until(_running)
 
     await client.patch("/api/groups/external", json={"enabled": False})
-    await asyncio.sleep(0.05)
-    assert 1 not in sched._tasks
+    await _poll_until(_not_running)
 
     await client.patch("/api/groups/external", json={"enabled": True})
-    await asyncio.sleep(0.05)
-    assert 1 in sched._tasks
+    await _poll_until(_running)
 
 
 async def test_patch_unknown_group_404(client: AsyncClient) -> None:

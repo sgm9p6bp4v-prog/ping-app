@@ -195,6 +195,59 @@ async def test_csrf_guard_allows_read_without_header(app: FastAPI) -> None:
     assert r.status_code == 200
 
 
+async def test_dismiss_suggestion_unknown_host_404(client: AsyncClient) -> None:
+    """Audit fix: unknown referents used to hit the FK constraint → 500."""
+    r = await client.post(
+        "/api/suggestions/dismiss", json={"host_id": 9999, "group_name": "default"}
+    )
+    assert r.status_code == 404
+
+
+async def test_dismiss_suggestion_unknown_group_404(client: AsyncClient) -> None:
+    h = (await client.post("/api/hosts", json={"name": "a", "address": "1.1.1.1"})).json()
+    r = await client.post(
+        "/api/suggestions/dismiss", json={"host_id": h["id"], "group_name": "nope"}
+    )
+    assert r.status_code == 404
+
+
+async def test_dismiss_suggestion_valid_referents_204(client: AsyncClient) -> None:
+    h = (
+        await client.post(
+            "/api/hosts", json={"name": "a", "address": "1.1.1.1", "group_name": "ext"}
+        )
+    ).json()
+    r = await client.post(
+        "/api/suggestions/dismiss", json={"host_id": h["id"], "group_name": "ext"}
+    )
+    assert r.status_code == 204
+
+
+async def test_accept_suggestion_unknown_host_404(client: AsyncClient) -> None:
+    r = await client.post(
+        "/api/suggestions/accept", json={"host_id": 9999, "group_name": "default"}
+    )
+    assert r.status_code == 404
+
+
+async def test_delete_group_cidr_normalizes_query_param(client: AsyncClient) -> None:
+    """Audit fix: add stores str(ip_network(v, strict=False)) but DELETE used
+    to match the raw query string — host-bit forms never matched."""
+    # add stores the normalized network: 10.0.0.5/24 → 10.0.0.0/24
+    r = await client.post("/api/groups/lan/cidrs", json={"cidr": "10.0.0.5/24"})
+    assert r.status_code == 201
+    assert (await client.get("/api/groups/lan/cidrs")).json() == ["10.0.0.0/24"]
+
+    # delete with the same un-normalized spelling must match
+    r = await client.delete("/api/groups/lan/cidrs", params={"cidr": "10.0.0.5/24"})
+    assert r.status_code == 204
+    assert (await client.get("/api/groups/lan/cidrs")).json() == []
+
+    # invalid CIDR input → 422 (not a silent 404)
+    r = await client.delete("/api/groups/lan/cidrs", params={"cidr": "not-a-cidr"})
+    assert r.status_code == 422
+
+
 async def test_host_cap_enforced(client: AsyncClient, monkeypatch) -> None:
     """Final audit GPT MED: LAN client must not be able to spam unlimited hosts."""
     monkeypatch.setattr(api_mod, "HOST_CAP", 3)

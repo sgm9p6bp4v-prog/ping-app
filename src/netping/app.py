@@ -9,9 +9,11 @@ public surface.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -68,8 +70,11 @@ async def lifespan(app: FastAPI):
         timeout_s=settings.ping_timeout_s,
         broadcaster=hub.broadcast,
     )
-    ping_interface, ping_source = ping_binding_for_selection(
-        await store.get_setting("ping_interface", "auto")
+    # ping_binding_for_selection shells out (subprocess.run) — keep startup
+    # off the event loop's blocking path (audit fix).
+    ping_interface, ping_source = await asyncio.to_thread(
+        ping_binding_for_selection,
+        await store.get_setting("ping_interface", "auto"),
     )
     scheduler.set_ping_interface(ping_interface, source_address=ping_source)
     # Pinger is NOT started here — boots PAUSED. Operator presses START in
@@ -93,8 +98,25 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         purge_task.cancel()
+        # Await the cancelled task so a mid-purge DELETE finishes/unwinds
+        # before the store is closed underneath it (audit fix).
+        with contextlib.suppress(asyncio.CancelledError):
+            await purge_task
         await monitoring.shutdown()
         await store.close()
+
+
+def _ws_origin_allowed(origin: str, host_header: str | None, allowed: list[str]) -> bool:
+    """CSWSH guard: an Origin, when sent, must be same-host as the request
+    Host header or explicitly allowed via PING_CORS_ORIGINS."""
+    if origin in allowed:
+        return True
+    try:
+        origin_host = urlsplit(origin).hostname
+        request_host = urlsplit(f"//{host_header}").hostname if host_header else None
+    except ValueError:
+        return False
+    return origin_host is not None and origin_host == request_host
 
 
 async def _purge_loop(store: Store, sample_days: int, event_days: int) -> None:
@@ -123,6 +145,15 @@ def create_app() -> FastAPI:
 
     @app.websocket("/ws")
     async def ws_endpoint(ws: WebSocket) -> None:
+        # Cross-Site WebSocket Hijacking guard: browsers always send Origin
+        # on WS handshakes — reject mismatches before accept. Absent Origin
+        # (curl, scripts, LAN tools) stays allowed (audit fix).
+        origin = ws.headers.get("origin")
+        if origin and not _ws_origin_allowed(
+            origin, ws.headers.get("host"), settings.cors_origins
+        ):
+            await ws.close(code=1008)  # policy violation
+            return
         hub: WebSocketHub = app.state.hub
         await hub.connect(ws)
         try:

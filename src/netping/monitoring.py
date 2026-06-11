@@ -34,7 +34,7 @@ class MonitoringController:
         scheduler: PingScheduler,
         hub: WebSocketHub,
         *,
-        duration_s: int = 1800,
+        duration_s: float = 1800,
     ) -> None:
         self.scheduler = scheduler
         self.hub = hub
@@ -151,7 +151,7 @@ class MonitoringController:
         if packet_limit is None:
             self._limit_mode = "infinite"
             return
-        if not 1 <= packet_limit <= 1000:
+        if not isinstance(packet_limit, int) or not 1 <= packet_limit <= 1000:
             raise ValueError("packet_limit must be between 1 and 1000")
         disabled = await self.scheduler.store.disabled_group_names()
         hosts = await self.scheduler.store.list_hosts()
