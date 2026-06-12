@@ -39,6 +39,19 @@ cd "$ROOT"
 VERSION=$(grep -E '^version' pyproject.toml | head -1 | sed -E 's/.*"([^"]+)".*/\1/')
 if [[ -z "$VERSION" ]]; then echo "could not extract version from pyproject.toml"; exit 1; fi
 
+if [[ -n "${PIP:-}" ]]; then
+  PIP_CMD=("$PIP")
+elif [[ -x "$ROOT/.venv/bin/pip" ]]; then
+  PIP_CMD=("$ROOT/.venv/bin/pip")
+elif command -v pip >/dev/null; then
+  PIP_CMD=("pip")
+elif python3 -m pip --version >/dev/null 2>&1; then
+  PIP_CMD=("python3" "-m" "pip")
+else
+  echo "pip not found. Run 'make install-dev' or set PIP=/path/to/pip." >&2
+  exit 1
+fi
+
 BUILD="dist/build"
 OUT="dist/ping-app-${VERSION}.tar.gz"
 
@@ -79,7 +92,7 @@ if [[ "$ARCH" != "$PLATFORM" ]]; then
 fi
 
 echo "[bundle] downloading wheels..."
-pip download \
+"${PIP_CMD[@]}" download \
   --no-deps \
   --only-binary=:all: \
   "${PLATFORM_FLAGS[@]}" \
