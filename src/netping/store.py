@@ -100,8 +100,39 @@ CREATE TABLE IF NOT EXISTS app_settings (
 # ----------------------------------------------------------------------------- types
 
 
+# Retention purge deletes in chunks of this many rows per transaction so the
+# write lock is released between chunks (see Store._purge_table).
+PURGE_CHUNK_ROWS = 50_000
+
+# Single source of truth for the samples/events INSERTs: used by BOTH the
+# batched executemany flush path and the per-row FK-violation fallback, so the
+# two statements (and their param tuples) can never drift apart.
+_SAMPLES_INSERT_SQL = (
+    "INSERT INTO samples (host_id, ts, rtt_ms, success, error) VALUES (?, ?, ?, ?, ?)"
+)
+_EVENTS_INSERT_SQL = "INSERT INTO events (host_id, ts, type, message) VALUES (?, ?, ?, ?)"
+
+
+def _sample_params(s: Sample) -> tuple[Any, ...]:
+    return (s.host_id, s.ts, s.rtt_ms, int(s.success), s.error)
+
+
+def _event_params(e: Event) -> tuple[Any, ...]:
+    return (e.host_id, e.ts, e.type, e.message)
+
+
 def utcnow_iso() -> str:
     return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+
+
+def _query_ts(dt: datetime) -> str:
+    """Format a query bound for comparison against stored (UTC) timestamps.
+
+    Naive datetimes are taken as UTC — ``.astimezone(UTC)`` alone would
+    interpret them as server-local time and skew the window (audit fix)."""
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
 
 @dataclass(slots=True)
@@ -240,6 +271,9 @@ class Store:
             await db.execute("PRAGMA journal_mode=WAL")
             await db.execute("PRAGMA synchronous=NORMAL")
             await db.execute("PRAGMA foreign_keys=ON")
+            # Explicit busy timeout so short write-lock contention (e.g. the
+            # retention purge) waits instead of failing the writer flush.
+            await db.execute("PRAGMA busy_timeout=5000")
             yield db
         finally:
             await db.close()
@@ -291,6 +325,7 @@ class Store:
             )
             await db.commit()
             host_id = cur.lastrowid
+        assert host_id is not None  # successful INSERT always sets lastrowid
         host = await self.get_host(host_id)
         assert host is not None
         return host
@@ -525,10 +560,10 @@ class Store:
         sql = "SELECT ts, rtt_ms, success, error FROM samples WHERE host_id = ?"
         if since is not None:
             sql += " AND ts >= ?"
-            params.append(since.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%S.%fZ"))
+            params.append(_query_ts(since))
         if until is not None:
             sql += " AND ts <= ?"
-            params.append(until.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%S.%fZ"))
+            params.append(_query_ts(until))
         sql += " ORDER BY ts DESC LIMIT ?"
         params.append(limit)
         async with self._conn() as db, db.execute(sql, params) as cur:
@@ -583,42 +618,77 @@ class Store:
                 if events:
                     await self._insert_events(db, events)
                 await db.commit()
-        except Exception:
-            # Transient errors (e.g. host deleted mid-flush → FK violation)
-            # → re-queue once. Persistent errors → drop the bad batch with a
-            # loud log so the writer cannot be poisoned (Final audit GPT).
-            self._flush_failures += 1
-            log = logging.getLogger(__name__)
-            if self._flush_failures <= 2:
-                log.exception("flush failed (attempt %d); re-queueing buffer",
-                              self._flush_failures)
-                async with self._buf_lock:
-                    self._sample_buf = samples + self._sample_buf
-                    self._event_buf = events + self._event_buf
-            else:
-                log.exception(
-                    "flush failed %dx in a row; DROPPING %d samples + %d events to "
-                    "unblock the writer. Investigate immediately.",
-                    self._flush_failures, len(samples), len(events),
+        except sqlite3.IntegrityError:
+            # FK violation: a host was deleted while its rows were still
+            # buffered. The batched executemany aborts wholesale, which used
+            # to poison the entire batch (other hosts' samples included) and
+            # drop it after 2 re-queues — fall back to per-row inserts and
+            # skip only the violating rows (audit fix).
+            try:
+                dropped = await self._insert_skipping_violations(samples, events)
+            except Exception:
+                # The fallback itself failed transiently → normal retry path.
+                await self._on_flush_failure(samples, events)
+                return
+            if dropped:
+                logging.getLogger(__name__).warning(
+                    "flush hit FK violations; dropped %d orphaned rows, kept %d",
+                    dropped, len(samples) + len(events) - dropped,
                 )
-                self._flush_failures = 0
+        except Exception:
+            await self._on_flush_failure(samples, events)
             return
         # success
         self._flush_failures = 0
 
+    async def _on_flush_failure(self, samples: list[Sample], events: list[Event]) -> None:
+        # Transient errors (e.g. database locked) → re-queue once. Persistent
+        # errors → drop the bad batch with a loud log so the writer cannot be
+        # poisoned (Final audit GPT). Must be called from an except block.
+        self._flush_failures += 1
+        log = logging.getLogger(__name__)
+        if self._flush_failures <= 2:
+            log.exception("flush failed (attempt %d); re-queueing buffer",
+                          self._flush_failures)
+            async with self._buf_lock:
+                self._sample_buf = samples + self._sample_buf
+                self._event_buf = events + self._event_buf
+        else:
+            log.exception(
+                "flush failed %dx in a row; DROPPING %d samples + %d events to "
+                "unblock the writer. Investigate immediately.",
+                self._flush_failures, len(samples), len(events),
+            )
+            self._flush_failures = 0
+
+    async def _insert_skipping_violations(
+        self, samples: list[Sample], events: list[Event]
+    ) -> int:
+        """Per-row insert fallback: skip FK-violating rows, keep the rest.
+
+        Returns the number of dropped rows."""
+        dropped = 0
+        async with self._conn() as db:
+            for s in samples:
+                try:
+                    await db.execute(_SAMPLES_INSERT_SQL, _sample_params(s))
+                except sqlite3.IntegrityError:
+                    dropped += 1
+            for e in events:
+                try:
+                    await db.execute(_EVENTS_INSERT_SQL, _event_params(e))
+                except sqlite3.IntegrityError:
+                    dropped += 1
+            await db.commit()
+        return dropped
+
     @staticmethod
     async def _insert_samples(db: aiosqlite.Connection, samples: Iterable[Sample]) -> None:
-        await db.executemany(
-            "INSERT INTO samples (host_id, ts, rtt_ms, success, error) VALUES (?, ?, ?, ?, ?)",
-            [(s.host_id, s.ts, s.rtt_ms, int(s.success), s.error) for s in samples],
-        )
+        await db.executemany(_SAMPLES_INSERT_SQL, [_sample_params(s) for s in samples])
 
     @staticmethod
     async def _insert_events(db: aiosqlite.Connection, events: Iterable[Event]) -> None:
-        await db.executemany(
-            "INSERT INTO events (host_id, ts, type, message) VALUES (?, ?, ?, ?)",
-            [(e.host_id, e.ts, e.type, e.message) for e in events],
-        )
+        await db.executemany(_EVENTS_INSERT_SQL, [_event_params(e) for e in events])
 
     async def purge(self, *, sample_days: int, event_days: int) -> tuple[int, int]:
         """Delete samples older than ``sample_days`` and events older than
@@ -626,8 +696,28 @@ class Store:
         now = datetime.now(UTC)
         sample_cutoff = (now - timedelta(days=sample_days)).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
         event_cutoff = (now - timedelta(days=event_days)).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+        deleted_samples = await self._purge_table("samples", sample_cutoff)
+        deleted_events = await self._purge_table("events", event_cutoff)
+        return deleted_samples, deleted_events
+
+    async def _purge_table(self, table: str, cutoff: str) -> int:
+        """Chunked retention delete.
+
+        A single huge DELETE can hold the write lock past the busy timeout
+        and starve the writer into its batch-drop path (audit fix). The
+        rowid-subquery form is used because ``DELETE ... LIMIT`` requires
+        SQLITE_ENABLE_UPDATE_DELETE_LIMIT, which bundled builds often lack.
+        ``table`` is an internal constant, never user input."""
+        deleted = 0
         async with self._conn() as db:
-            cur1 = await db.execute("DELETE FROM samples WHERE ts < ?", (sample_cutoff,))
-            cur2 = await db.execute("DELETE FROM events WHERE ts < ?", (event_cutoff,))
-            await db.commit()
-            return cur1.rowcount, cur2.rowcount
+            while True:
+                cur = await db.execute(
+                    f"DELETE FROM {table} WHERE rowid IN "
+                    f"(SELECT rowid FROM {table} WHERE ts < ? LIMIT ?)",
+                    (cutoff, PURGE_CHUNK_ROWS),
+                )
+                await db.commit()  # release the write lock between chunks
+                deleted += cur.rowcount
+                if cur.rowcount < PURGE_CHUNK_ROWS:
+                    break
+        return deleted

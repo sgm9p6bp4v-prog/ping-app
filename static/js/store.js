@@ -30,6 +30,13 @@ export const Store = {
   },
 
   upsertGroup(g, reason = "group") {
+    // Structure-affecting fields (e.g. collapsed) add/remove DOM that only a
+    // structure render rebuilds — a plain "group" (live) notify is a no-op.
+    // Escalate mechanically on ANY field change so the next structural group
+    // field cannot silently miss a re-render; identical payloads (WS echo of
+    // a no-op PATCH) stay on the cheap path.
+    const prev = this.groups.get(g.name);
+    if (!prev || groupChanged(prev, g)) reason = "structure";
     this.groups.set(g.name, g);
     this.notify(reason);
   },
@@ -63,14 +70,13 @@ export const Store = {
   addSample(s) {
     let entry = this.samples.get(s.host_id);
     if (!entry) {
-      entry = { samples: [], stats: emptyStats(), status: "idle", failStreak: 0 };
+      entry = { samples: [], stats: emptyStats(), status: "idle" };
       this.samples.set(s.host_id, entry);
     }
     entry.samples.push(s);
     if (entry.samples.length > MAX_SAMPLES_PER_HOST) entry.samples.shift();
-    entry.failStreak = s.success ? 0 : entry.failStreak + 1;
     entry.stats = recomputeStats(entry.samples);
-    entry.status = deriveStatus(entry);
+    entry.status = deriveStatus(entry.samples);
     this.notify("sample");
   },
 
@@ -134,12 +140,35 @@ function recomputeStats(samples) {
   };
 }
 
-function deriveStatus(entry) {
-  if (entry.samples.length === 0) return "idle";
-  if (entry.failStreak >= OFFLINE_FAIL_STREAK) return "offline";
-  const last = entry.samples[entry.samples.length - 1];
-  if (!last.success) return entry.failStreak > 0 ? "offline" : "online";
-  return last.rtt_ms != null && last.rtt_ms > SLOW_THRESHOLD_MS ? "slow" : "online";
+// Pure derivation from the sample buffer — no dependence on previously
+// derived state, so the status for a given buffer is always the same.
+function deriveStatus(samples) {
+  if (samples.length === 0) return "idle";
+  let streak = 0;
+  for (let i = samples.length - 1; i >= 0 && !samples[i].success; i--) streak += 1;
+  if (streak >= OFFLINE_FAIL_STREAK) return "offline";
+  // Below the offline threshold a lost packet keeps the status implied by the
+  // most recent successful sample instead of flipping the host immediately.
+  for (let i = samples.length - 1; i >= 0; i--) {
+    const s = samples[i];
+    if (s.success) {
+      return s.rtt_ms != null && s.rtt_ms > SLOW_THRESHOLD_MS ? "slow" : "online";
+    }
+  }
+  // No success in the buffer and streak below threshold: host is warming up
+  // (or down since creation with < OFFLINE_FAIL_STREAK samples).
+  return "idle";
+}
+
+// Shallow compare of two group records over the union of their own keys.
+function groupChanged(prev, next) {
+  for (const k of Object.keys(prev)) {
+    if (prev[k] !== next[k]) return true;
+  }
+  for (const k of Object.keys(next)) {
+    if (!(k in prev)) return true;
+  }
+  return false;
 }
 
 export { MAX_SAMPLES_PER_HOST, SLOW_THRESHOLD_MS };

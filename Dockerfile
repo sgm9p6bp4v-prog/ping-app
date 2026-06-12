@@ -1,3 +1,6 @@
+# Option for stricter reproducibility: pin the base image by digest
+# (python:3.12-slim-bookworm@sha256:...) — deliberately not done yet, it
+# couples builds to one registry snapshot and needs a refresh policy.
 FROM python:3.12-slim-bookworm
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -19,7 +22,8 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt ./
-RUN pip install --no-cache-dir --upgrade pip \
+# Pin pip itself — a floating `--upgrade pip` makes image builds drift.
+RUN pip install --no-cache-dir 'pip==25.3' \
     && pip install --no-cache-dir -r requirements.txt
 
 RUN addgroup --system ping-app \
@@ -34,4 +38,5 @@ USER ping-app
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "uvicorn netping.app:app --host ${PING_BIND_HOST:-0.0.0.0} --port ${PING_PORT:-8000}"]
+# `exec` makes uvicorn PID 1 so it receives SIGTERM directly on `docker stop`.
+CMD ["sh", "-c", "exec uvicorn netping.app:app --host ${PING_BIND_HOST:-0.0.0.0} --port ${PING_PORT:-8000}"]

@@ -28,8 +28,8 @@ install-dev: venv
 
 lock: venv
 	$(BIN)/pip install pip-tools
-	$(BIN)/pip-compile --output-file=requirements.txt requirements.in
-	$(BIN)/pip-compile --output-file=requirements-dev.txt requirements-dev.in
+	$(BIN)/pip-compile --generate-hashes --output-file=requirements.txt requirements.in
+	$(BIN)/pip-compile --generate-hashes --allow-unsafe --output-file=requirements-dev.txt requirements-dev.in
 
 test:
 	$(BIN)/pytest
@@ -48,4 +48,5 @@ format:
 check: lint test
 
 clean:
-	rm -rf $(VENV) .pytest_cache .ruff_cache **/__pycache__
+	rm -rf $(VENV) .pytest_cache .ruff_cache
+	find . -type d -name __pycache__ -prune -exec rm -rf {} +

@@ -9,20 +9,24 @@ public surface.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any
+from urllib.parse import urlsplit
 
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
 
 from .api import router as api_router
 from .config import get_settings
 from .monitoring import MonitoringController
-from .network import ping_binding_for_selection
+from .network import ping_binding_for_selection_async
 from .pinger import PingScheduler
 from .store import Store
 from .ws import WebSocketHub
@@ -47,6 +51,21 @@ class CSRFGuardMiddleware(BaseHTTPMiddleware):
             )
         return await call_next(request)
 
+class NoCacheStaticFiles(StaticFiles):
+    """StaticFiles that forces revalidation on every request.
+
+    ES-module imports are unversioned (cache busting happens only on the entry
+    point), so a heuristically cached submodule can survive an upgrade and mix
+    frontend versions. ``no-cache`` keeps ETag/Last-Modified revalidation —
+    cheap 304s on a LAN — instead of serving stale files from browser cache.
+    """
+
+    def file_response(self, *args: Any, **kwargs: Any) -> Response:
+        response = super().file_response(*args, **kwargs)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
 log = logging.getLogger("netping")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s — %(message)s")
 
@@ -68,7 +87,7 @@ async def lifespan(app: FastAPI):
         timeout_s=settings.ping_timeout_s,
         broadcaster=hub.broadcast,
     )
-    ping_interface, ping_source = ping_binding_for_selection(
+    ping_interface, ping_source = await ping_binding_for_selection_async(
         await store.get_setting("ping_interface", "auto")
     )
     scheduler.set_ping_interface(ping_interface, source_address=ping_source)
@@ -93,8 +112,30 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         purge_task.cancel()
+        # Await the cancelled task so a mid-purge DELETE finishes/unwinds
+        # before the store is closed underneath it (audit fix).
+        with contextlib.suppress(asyncio.CancelledError):
+            await purge_task
         await monitoring.shutdown()
         await store.close()
+
+
+def _ws_origin_allowed(origin: str, host_header: str | None, allowed: list[str]) -> bool:
+    """CSWSH guard: an Origin, when sent, must be same-host as the request
+    Host header or explicitly allowed via PING_CORS_ORIGINS."""
+    # "*" mirrors CORSMiddleware semantics: the operator opted into any origin.
+    if "*" in allowed or origin in allowed:
+        return True
+    # Deliberate: the same-host comparison is hostname-only (port and scheme
+    # ignored). This is a LAN tool, REST writes are CSRF-guarded, and
+    # PING_CORS_ORIGINS is the explicit allowlist for reverse-proxy setups
+    # where the upstream Host differs from the public name.
+    try:
+        origin_host = urlsplit(origin).hostname
+        request_host = urlsplit(f"//{host_header}").hostname if host_header else None
+    except ValueError:
+        return False
+    return origin_host is not None and origin_host == request_host
 
 
 async def _purge_loop(store: Store, sample_days: int, event_days: int) -> None:
@@ -123,6 +164,15 @@ def create_app() -> FastAPI:
 
     @app.websocket("/ws")
     async def ws_endpoint(ws: WebSocket) -> None:
+        # Cross-Site WebSocket Hijacking guard: browsers always send Origin
+        # on WS handshakes — reject mismatches before accept. Absent Origin
+        # (curl, scripts, LAN tools) stays allowed (audit fix).
+        origin = ws.headers.get("origin")
+        if origin and not _ws_origin_allowed(
+            origin, ws.headers.get("host"), settings.cors_origins
+        ):
+            await ws.close(code=1008)  # policy violation
+            return
         hub: WebSocketHub = app.state.hub
         await hub.connect(ws)
         try:
@@ -141,7 +191,7 @@ def create_app() -> FastAPI:
 
     static_dir = Path(__file__).resolve().parent.parent.parent / "static"
     if static_dir.is_dir():
-        app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
+        app.mount("/", NoCacheStaticFiles(directory=static_dir, html=True), name="static")
 
     return app
 

@@ -7,6 +7,7 @@ services:
     image: ping-app:macos-local
     container_name: ping-app-macos
     restart: unless-stopped
+    init: true
     ports:
       - "${PING_MACOS_HTTP_PORT:-8000}:8000"
     cap_add:

@@ -24,11 +24,14 @@ export function initPingSettings() {
   const packetsInput = document.getElementById("hero-packets");
   if (!intervalInput || !packetsInput) return;
 
-  const defaults = { interval: 1, packets: 10 };
-  intervalInput.value = defaults.interval;
-  packetsInput.value = defaults.packets;
-  localStorage.setItem(INTERVAL_KEY, defaults.interval);
-  localStorage.setItem(PACKETS_KEY, defaults.packets);
+  // Restore persisted settings; fall back to the defaults only when the
+  // keys are absent so user choices survive a reload.
+  const storedInterval = localStorage.getItem(INTERVAL_KEY);
+  const storedPackets = localStorage.getItem(PACKETS_KEY);
+  intervalInput.value = storedInterval !== null ? clampNumber(storedInterval, 1, 0.2, 60) : 1;
+  packetsInput.value = storedPackets !== null ? formatPacketLimit(storedPackets) : 10;
+  localStorage.setItem(INTERVAL_KEY, intervalInput.value);
+  localStorage.setItem(PACKETS_KEY, packetsInput.value);
   fitHeroInput(intervalInput);
   fitHeroInput(packetsInput);
 

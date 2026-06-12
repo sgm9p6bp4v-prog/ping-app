@@ -25,7 +25,7 @@ function open(host) {
   modal.querySelector("#editor-interval").value = host?.interval_s ?? getPingDefaults().interval;
   modal.querySelector("#editor-enabled").checked = host?.enabled ?? true;
   modal.querySelector("#editor-delete").style.display = host ? "" : "none";
-  modal.querySelector("#editor-error").textContent = "";
+  hideError();
   backdrop.style.display = "block";
   modal.style.display = "grid";
   modal.querySelector("#editor-name").focus();
@@ -37,6 +37,18 @@ function close() {
   editing = null;
   if (previouslyFocused?.focus) previouslyFocused.focus();
   previouslyFocused = null;
+}
+
+function hideError() {
+  const err = modal.querySelector("#editor-error");
+  err.textContent = "";
+  err.style.display = "none";
+}
+
+function showError(message) {
+  const err = modal.querySelector("#editor-error");
+  err.textContent = message;
+  err.style.display = "block";
 }
 
 function focusableInModal() {
@@ -115,11 +127,10 @@ async function onSubmit(ev) {
     } else {
       await api.createHost(payload);
     }
+    hideError();
     close();
   } catch (e) {
-    const err = modal.querySelector("#editor-error");
-    err.textContent = e.message;
-    err.style.display = "block";
+    showError(e.message);
   }
 }
 
@@ -128,10 +139,9 @@ async function onDelete() {
   if (!confirm(t("editor.delete_confirm"))) return;
   try {
     await api.deleteHost(editing.id);
+    hideError();
     close();
   } catch (e) {
-    const err = modal.querySelector("#editor-error");
-    err.textContent = e.message;
-    err.style.display = "block";
+    showError(e.message);
   }
 }

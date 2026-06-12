@@ -5,9 +5,16 @@
 # directory (the one containing this script). Idempotent: re-running upgrades
 # in place without touching /var/lib/ping-app data.
 #
-# Tested matrix: Debian 12 / Ubuntu 22.04, 24.04. Python 3.11+.
+# Tested matrix: Debian 12 / Ubuntu 24.04. Python 3.11+.
+# Ubuntu 22.04 ships Python 3.10 — usable only with a separately provisioned
+# Python 3.11+ (e.g. deadsnakes or a vendor build) passed via PYTHON=...
 
 set -euo pipefail
+
+# Hardened hosts often run root with umask 027/077 — files created below would
+# then be unreadable by the ping-app service user (venv/src group/other access
+# stripped → systemd 203/EXEC crash loop). Force a world-readable umask.
+umask 022
 
 APP_USER=${APP_USER:-ping-app}
 APP_GROUP=${APP_GROUP:-ping-app}
@@ -33,13 +40,31 @@ echo
 command -v "$PY" >/dev/null || { echo "python3 not found"; exit 1; }
 PY_VER=$($PY -c 'import sys; print(f"{sys.version_info[0]}.{sys.version_info[1]}")')
 
+# Stock Debian/Ubuntu server images ship python3 WITHOUT the venv/ensurepip
+# modules (separate python3-venv package). On an air-gapped box that cannot be
+# apt-installed, so fail fast with an actionable message instead of a cryptic
+# ensurepip traceback at venv-creation time.
+if ! "$PY" -c 'import ensurepip' >/dev/null 2>&1 || ! "$PY" -m venv --help >/dev/null 2>&1; then
+  echo "Python venv support missing: '$PY' cannot import ensurepip / run -m venv." >&2
+  echo "Install the python3-venv package (e.g. apt install python3-venv) on the" >&2
+  echo "target BEFORE going offline — it is a hard prerequisite of this installer." >&2
+  exit 1
+fi
+
 # Bundle ships CPython wheels for one Python version (see tools/build_bundle.sh
 # --python-version, default 3.11). Mismatch = pip will refuse to install the
-# wheels with --no-index → silent install failure. We pick the wheel-tagged
-# version from a sentinel wheel filename and compare exactly.
-EXPECTED_PY=$(ls "$BUNDLE_DIR/wheels"/*.whl 2>/dev/null \
-  | grep -oE 'cp[0-9]+' | sort -u | head -1 \
-  | sed 's/cp/3./;s/3\.3/3.1/' || true)
+# wheels with --no-index → silent install failure. We derive the bundle's
+# target from the wheel tags: extract every cp3<minor> tag and take the
+# numeric MAX. Rationale: non-abi3 wheels always carry the exact build-target
+# tag; abi3 wheels (e.g. cp310-abi3-...) carry a lower-or-equal tag and
+# install fine on newer Pythons — so the highest tag is the true target.
+# KEEP IN SYNC: tools/verify_bundle_offline.sh duplicates this exact pipeline.
+EXPECTED_PY_MINOR=$(ls "$BUNDLE_DIR/wheels"/*.whl 2>/dev/null \
+  | grep -oE 'cp3[0-9]+' | sed -E 's/^cp3//' | sort -un | tail -1 || true)
+EXPECTED_PY=""
+if [[ -n "$EXPECTED_PY_MINOR" ]]; then
+  EXPECTED_PY="3.${EXPECTED_PY_MINOR}"
+fi
 if [[ -z "$EXPECTED_PY" ]]; then
   # All-pure bundle — any modern Python works.
   case "$PY_VER" in
@@ -89,9 +114,28 @@ copy "$BUNDLE_DIR/src"    "$APP_DIR/src"
 copy "$BUNDLE_DIR/static" "$APP_DIR/static"
 install -m 0644 "$BUNDLE_DIR/requirements.txt" "$APP_DIR/requirements.txt"
 
+# Re-establish the root-owned-code invariant regardless of prior installer or
+# builder umask: installs done by the OLD installer chowned APP_DIR to the
+# service user, and rsync/cp -a can preserve restrictive modes from the
+# builder. Root ownership + world-readability here; DATA_DIR is chowned to
+# the service user further below — that chown MUST stay after this block.
+chown -R root:root "$APP_DIR"
+chmod -R u=rwX,go=rX "$APP_DIR"
+
 # ---------------- venv ------------------------------------------------------
 
 VENV="$APP_DIR/.venv"
+# Stale-ABI guard: a venv left behind by a previous install with a different
+# Python MINOR (e.g. OS upgrade 3.11→3.12) has broken compiled deps. Compare
+# minor versions only — patch-level upgrades (3.11.8→3.11.9) keep the ABI and
+# must NOT force a rebuild. A broken/missing venv python yields "" → rebuild.
+if [[ -d $VENV ]]; then
+  VENV_PY_VER=$("$VENV/bin/python" -c 'import sys; print(f"{sys.version_info[0]}.{sys.version_info[1]}")' 2>/dev/null || true)
+  if [[ "$VENV_PY_VER" != "$PY_VER" ]]; then
+    echo "[install] venv Python (${VENV_PY_VER:-broken}) != target Python ($PY_VER) — recreating venv"
+    rm -rf "$VENV"
+  fi
+fi
 if [[ ! -d $VENV ]]; then
   $PY -m venv "$VENV"
   echo "[install] created venv  $VENV"
@@ -100,7 +144,10 @@ fi
 # Use the venv's bundled pip directly; do NOT --upgrade pip from the offline
 # wheels (pip itself is not in the bundle and the earlier `|| true` would mask
 # a real failure — Final audit B1).
-"$VENV/bin/pip" install --no-index --find-links "$BUNDLE_DIR/wheels" --upgrade \
+# --require-hashes: requirements.txt is compiled with --generate-hashes, so
+# every wheel in the bundle must match its locked sha256.
+"$VENV/bin/pip" install --no-index --require-hashes \
+  --find-links "$BUNDLE_DIR/wheels" --upgrade \
   -r "$APP_DIR/requirements.txt"
 
 # ---------------- env file --------------------------------------------------
@@ -117,7 +164,9 @@ fi
 install -m 0644 "$BUNDLE_DIR/deploy/ping-app.service" /etc/systemd/system/ping-app.service
 systemctl daemon-reload
 systemctl enable ping-app.service
-chown -R "$APP_USER:$APP_GROUP" "$APP_DIR" "$DATA_DIR"
+# Only the data dir belongs to the service user. Code + venv stay root-owned
+# (0755) so a compromised service cannot rewrite its own code.
+chown -R "$APP_USER:$APP_GROUP" "$DATA_DIR"
 
 if systemctl is-active --quiet ping-app.service; then
   systemctl restart ping-app.service

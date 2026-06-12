@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import platform
@@ -75,6 +76,29 @@ def interface_snapshot(selected_name: str | None = None) -> dict[str, Any]:
             *[iface.to_dict() for iface in interfaces],
         ],
     }
+
+
+# ---- async facade -----------------------------------------------------------
+# The helpers in this module shell out synchronously (subprocess.run, up to
+# ~0.8s per command). Async callers (FastAPI handlers, lifespan) must use these
+# wrappers so the blocking work runs off the event loop. The sync functions
+# stay public for tests and internal callers. Each wrapper resolves the sync
+# function as a module global at call time, so monkeypatching e.g.
+# ``netping.network.list_network_interfaces`` still intercepts.
+
+
+async def interface_snapshot_async(selected_name: str | None = None) -> dict[str, Any]:
+    return await asyncio.to_thread(interface_snapshot, selected_name)
+
+
+async def list_network_interfaces_async() -> list[NetworkInterface]:
+    return await asyncio.to_thread(list_network_interfaces)
+
+
+async def ping_binding_for_selection_async(
+    selected_name: str | None,
+) -> tuple[str | None, str | None]:
+    return await asyncio.to_thread(ping_binding_for_selection, selected_name)
 
 
 def normalize_interface_selection(name: str | None) -> str:
@@ -269,8 +293,9 @@ def _ifconfig_address_map() -> dict[str, list[str]]:
     for line in out.splitlines():
         header = re.match(r"^([A-Za-z0-9_.:-]+):\s", line)
         if header:
-            current = header.group(1)
-            mapped.setdefault(current, [])
+            name = header.group(1)
+            mapped.setdefault(name, [])
+            current = name
             continue
         if current is None:
             continue

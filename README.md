@@ -259,6 +259,18 @@ packet-limit payload.
 
 ## Deploy On A LAN Server
 
+Target-server prerequisites (install these BEFORE going offline — the
+installer cannot fetch them on an air-gapped box):
+
+- Debian 12 or Ubuntu 24.04 (tested matrix). Ubuntu 22.04 ships Python 3.10
+  and works only with a separately provisioned Python 3.11+ passed to the
+  installer via `PYTHON=python3.11`.
+- Python 3.11+ matching the bundle's wheel build (`tools/build_bundle.sh
+  --python-version`, default 3.11).
+- The `python3-venv` package (`apt install python3-venv`) — stock
+  Debian/Ubuntu server images do not include the `venv`/`ensurepip` modules,
+  and `install.sh` aborts early if they are missing.
+
 Build an offline bundle on a machine with internet access:
 
 ```bash
