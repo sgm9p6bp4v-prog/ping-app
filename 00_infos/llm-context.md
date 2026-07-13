@@ -1,8 +1,8 @@
 # LLM Context — client--francesco-ping-app
 
-> Version: 2.0.1 — 2026-06-11 (Rework-Sprint feat/varga-fable-rework-christoph)
+> Version: 2.0.2 — Dokumentationsreview 2026-07-13
 
-## Was ist das?
+## Purpose / Was ist das?
 Fremd-Repo eines Kollegen (Francesco): **ping.me** — server-residentes LAN-Ping-Dashboard
 (bis /24, air-gapped Zielumgebung). Wir wurden eingeladen Code zuzuliefern.
 Unser Repo ist ein Arbeits-Clone — Francescos `origin` bleibt Single Source of Truth.
@@ -27,6 +27,38 @@ Unser Repo ist ein Arbeits-Clone — Francescos `origin` bleibt Single Source of
   seit ad51e98 auch native macOS-(launchd)- und Windows-(USB)-Pfade von Francesco.
 - **Tests** `tests/`: pytest, asyncio_mode=auto, filterwarnings=error. 139 Tests.
   Sync via Poll-until-Condition, nicht fixe Sleeps.
+
+## Setup
+
+- Entwicklung erfolgt in einer Repo-lokalen `.venv`; `make install-dev` installiert
+  den gesperrten Dev-Stand, `make test` und `make lint` prüfen ihn.
+- Die Zielumgebung ist ein kundenseitiger, air-gapped Linux-Server. Das Bundle wird
+  auf einem freigegebenen Online-Buildhost erzeugt, anschließend mit
+  `tools/verify_bundle_offline.sh` strukturell geprüft und offline übertragen.
+- `install.sh` benötigt root, Python 3.11+ samt `venv`/`ensurepip` sowie ein zum
+  Bundle passendes Python-Minor-Release.
+- Bundle-Erzeugung lädt Wheels und ist deshalb kein still auszuführender
+  Standardcheck; dafür gilt ein explizites Download-/Freigabe-Gate.
+
+## Betrieb
+
+- Varga betreibt keine Live-Instanz. Installation, systemd-Service und Daten liegen
+  in Francescos Zielumgebung; `origin` bleibt die externe Code-SSOT.
+- Standardpfade sind `/opt/ping-app`, `/var/lib/ping-app` und `/etc/ping-app`.
+  SQLite-Daten unter `/var/lib/ping-app` müssen kundenseitig gesichert werden.
+- Der Dienst startet Monitoring bewusst pausiert. Start/Stop erfolgt über UI/API,
+  nicht durch unkontrollierten Dauer-Ping.
+- Kanonische Installation, Health-Prüfung und Rollback stehen in
+  `00_infos/runbooks/customer-operations.md`.
+
+## Schnittstellen
+
+- HTTP-UI und REST-API am konfigurierten `PING_BIND_HOST:PING_PORT`.
+- `GET /api/info` für Laufzeitinformationen; Monitoring-/Host-/Gruppen-Endpunkte
+  liegen unter `/api/`.
+- WebSocket `/ws` liefert Live-Status an Browser desselben Origins; zusätzliche
+  Origins müssen explizit über `PING_CORS_ORIGINS` erlaubt werden.
+- ICMP benötigt auf Linux die im systemd-Unit dokumentierte `CAP_NET_RAW`-Fähigkeit.
 
 ## Rework 2026-06-11 (Branch feat/varga-fable-rework-christoph)
 Umfassender Review + Fixpack auf Basis ad51e98. Highlights:
