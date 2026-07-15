@@ -50,7 +50,7 @@ commands:
 # === DEPLOYMENT ===
 deployment:
   deployed: false   # Kein Deploy bei uns (Francesco SSOT)
-  mode: "customer-managed-bundle"
+  mode: "external"
   ci:
     platform: "none"
     auto_deploy: false
@@ -89,7 +89,7 @@ lifecycle:
 
 # === OPERATIONAL (v2.0) ===
 operational:
-  auth_boundary: "lan-only"
+  auth_boundary: "none"
   data_store: "sqlite"
   backup_class: "standard"
   host: "external"
