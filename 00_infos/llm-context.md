@@ -1,6 +1,6 @@
 # LLM Context — client--francesco-ping-app
 
-> Version: 2.0.1 — 2026-06-11 (Rework-Sprint feat/varga-fable-rework-christoph)
+> Version: 2.0.3 — 2026-06-11 (Rework-Sprint feat/varga-fable-rework-christoph)
 
 ## Was ist das?
 Fremd-Repo eines Kollegen (Francesco): **ping.me** — server-residentes LAN-Ping-Dashboard
